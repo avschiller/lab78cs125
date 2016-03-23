@@ -27,7 +27,7 @@ You are given a Makefile and some starter code in `nc125.c` for option-handling.
 
 2. Your code should do full error checking, giving useful messages when things go wrong instead of crashing or silently exiting.
 
-3. The `-v` output should be written to standard output, not standard error. The contents of this output can be anything you think useful. However, it must end by printing a bandwidth measure (bytes per second transmitted or received, between when the network connection was established and when it closed).
+3. The `-v` output should be written to standard error, not standard output. You can print any status debugging information that you deem useful, e.g., when connections are established and/or bytes of data are transferred. However, it must end by printing a bandwidth measure (bytes per second transmitted or received, between when the network connection was established and when it closed).
 
 4. The final version of your code should permit domain names or IPv6 adressess for active connections, not just IPv4 dotted addresses. You must handle this by using `getaddrinfo` (see below).
 
