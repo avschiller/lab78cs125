@@ -26,7 +26,8 @@
     // recommended for socket functions
 #include <unistd.h>
     // for close
-
+#include <sys/types.h>
+#include <netdb.h>
 
 /**
  * Structure to hold command-line arguments
@@ -191,48 +192,86 @@ int main(int argc, char * argv[]) {
   }
 
   if (nc_args.listen){ // THE SERVER (listening)
+    
     // Step 0: Choose the server port, based on the command-line arguments.
-    int serv_port = nc_args.port;
+    //int serv_port = nc_args.port;
 
-    // Step 1: Create a socket.
-    int listenfd = socket(PF_INET, SOCK_STREAM, 0);
-    if (listenfd < 0) {
-      // Couldn’t create the socket.
-      perror("socket");
+    // Setyp getaddrinfo section!
+    int status;
+    struct addrinfo hints;
+    struct addrinfo *res;  // will point to the results
+
+    memset(&hints, 0, sizeof hints); // make sure the struct is empty
+    hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+
+    if ((status = getaddrinfo(NULL, (char*) nc_args.port, &hints, &res)) != 0) {
+      if (nc_args.verbose) {
+        fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+      }
       exit(1);
     }
-    
-    // Step 2: Configure the socket to a local port address.
-    struct sockaddr_in serverAddress;
-    // First zero out the address struct, and then
-    //   fill in the fields we care about.
-    memset(&serverAddress, 0, sizeof(serverAddress));
-    serverAddress.sin_family      = AF_INET;
-    serverAddress.sin_port        = htons(serv_port);
-    // Using IPv4 ...
-    // listen for a connection on the
-    //   specified port ...
-    serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);  // on any network interface
-    int bindError = bind(listenfd,
-                         (struct sockaddr*) &serverAddress,
-                         sizeof(serverAddress));
-    if (bindError) {
-      // Couldn’t bind the socket
-      perror("bind");
-      close(listenfd);
+
+
+    // Step 1: Create a socket.
+    int listenfd;
+    listenfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (listenfd < 0) {
+      // Couldn’t create the socket.
+      if (nc_args.verbose) {
+        perror("socket");
+      }
       exit(2);
     }
-    fprintf(stderr, "Listening on port %d\n", serv_port);
+
     
+    // Step 2: Configure the socket to a local port address.
+    int bindError = bind(listenfd, res->ai_addr, res->ai_addrlen);
+    if (bindError < 0) {
+      // Couldn’t bind the socket
+      if (nc_args.verbose) {
+        perror("bind");
+      }
+      close(listenfd);
+      exit(3);
+    }
+
+    //COMMENT OUT OLD WAY OF BINDING
+
+    // struct sockaddr_in serverAddress;
+    // // First zero out the address struct, and then
+    // //   fill in the fields we care about.
+    // memset(&serverAddress, 0, sizeof(serverAddress));
+    // serverAddress.sin_family      = AF_INET;
+    // serverAddress.sin_port        = htons(serv_port);
+    // // Using IPv4 ...
+    // // listen for a connection on the
+    // //   specified port ...
+    // serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);  // on any network interface
+    // int bindError = bind(listenfd,
+    //                      (struct sockaddr*) &serverAddress,
+    //                      sizeof(serverAddress));
+    // if (bindError) {
+    //   // Couldn’t bind the socket
+    //   perror("bind");
+    //   close(listenfd);
+    //   exit(2);
+    // }
+    // fprintf(stderr, "Listening on port %d\n", serv_port);
+    
+
     // Step 3: Start listening on the specified port
     const int QUEUELEN = 5;
     int listenError = listen(listenfd, QUEUELEN);
     if (listenError) {
       // Couldn’t start listening, e.g., because
       //   someone else is using the same port
-      perror("listen");
+      if (nc_args.verbose) {
+        perror("listen");
+      }
       close(listenfd);
-      exit(3); 
+      exit(4); 
     }
     
     // Handle each connection sequentially
@@ -266,42 +305,51 @@ int main(int argc, char * argv[]) {
       // Close the connection to this client
       close(clientfd);
     }
+
+    freeaddrinfo(res); // free the linked list
+
   }
 
   else { //THE CLIENT
     // Step 0: Get the server ip and port, based on the command-line arguments.
-    struct sockaddr_in serverAddress;
+    //int serv_port = nc_args.port;
     
-    // First zero out the address struct, and then
-    //   fill in the fields we care about.
-    memset(&serverAddress, 0, sizeof(serverAddress));
-    serverAddress.sin_family      = AF_INET;            // Using IPv4 ...
-    serverAddress.sin_port = htons(nc_args.port);
-    //serverAddress.sin_addr.s_addr = nc_args.server;
+    // Setyp getaddrinfo section!
+    int status;
+    struct addrinfo hints;
+    struct addrinfo *res;  // will point to the results
 
-    // Backconvert the server address for debugging purposes
-    const char MAX_DOTTED_IP_LEN = 15;
-    char ipAddressBuffer[MAX_DOTTED_IP_LEN + 1];  // Don’t forget \0
-    inet_ntop(AF_INET, &serverAddress.sin_addr.s_addr,
-              ipAddressBuffer, sizeof(ipAddressBuffer));
+    memset(&hints, 0, sizeof hints); // make sure the struct is empty
+    hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
+    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
-    fprintf(stderr, "Server at %s:%d\n", ipAddressBuffer, ntohs(serverAddress.sin_port));
-    
-    // Step 1: Create a socket for the connection.
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-      // Couldn’t create the socket.
-      perror("socket");
+    if ((status = getaddrinfo(nc_args.server, (char*) nc_args.port, &hints, &res)) != 0) {
+      if (nc_args.verbose) {
+        fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+      }
       exit(1);
     }
 
-    // Step 2: Connect the socket to the remote server
-    int connectError = connect (sockfd,
-                                (struct sockaddr*) &serverAddress,
-                                sizeof(serverAddress));
-    if (connectError) {
-      perror("connect");
+    // fprintf(stderr, "Server at %s:%d\n", ipAddressBuffer, ntohs(serverAddress.sin_port));
+    
+    // Step 1: Create a socket for the connection.
+    int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (sockfd < 0) {
+      // Couldn’t create the socket.
+      if (nc_args.verbose) {
+        perror("socket");
+      }
       exit(2);
+    }
+
+    // Step 2: Connect the socket to the remote server
+    int connectError = connect(sockfd, res->ai_addr, res->ai_addrlen);
+    if (connectError < 0) {
+      if (nc_args.verbose) {
+        perror("connect");
+      }
+      exit(3);
     }
     fprintf(stderr, "Connected to server.\n");
 
