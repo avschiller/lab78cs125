@@ -199,43 +199,79 @@ int main(int argc, char * argv[]) {
     // Setyp getaddrinfo section!
     int status;
     struct addrinfo hints;
-    struct addrinfo *res;  // will point to the results
+    struct addrinfo *servinfo, *p;  // will point to the results
+    int yes=1;
 
     memset(&hints, 0, sizeof hints); // make sure the struct is empty
     hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
     hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
-    if ((status = getaddrinfo(NULL, (char*) nc_args.port, &hints, &res)) != 0) {
+    if ((status = getaddrinfo(NULL, (char*) nc_args.port, &hints, &servinfo)) != 0) {
       if (nc_args.verbose) {
         fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
       }
       exit(1);
     }
 
-
-    // Step 1: Create a socket.
-    int listenfd;
-    listenfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (listenfd < 0) {
-      // Couldn’t create the socket.
-      if (nc_args.verbose) {
-        perror("socket");
+    int sockfd;
+    // loop through all the results and create the socket and bind to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+      if ((sockfd = socket(p->ai_family, p->ai_socktype,
+              p->ai_protocol)) == -1) {
+          //perror("server: socket");
+          continue;
       }
-      exit(2);
+
+      // what is this doing? - setting up socket permanent error?
+      if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,
+              sizeof(int)) == -1) {
+        if (nc_args.verbose) {
+          perror("socket");
+        }
+        exit(2);
+      }
+
+      if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+          close(sockfd);
+          //perror("server: bind");
+          continue;
+      }
+
+      break;
     }
 
-    
-    // Step 2: Configure the socket to a local port address.
-    int bindError = bind(listenfd, res->ai_addr, res->ai_addrlen);
-    if (bindError < 0) {
-      // Couldn’t bind the socket
+    freeaddrinfo(servinfo); // all done with this structure
+
+    if (p == NULL)  {
       if (nc_args.verbose) {
         perror("bind");
       }
-      close(listenfd);
       exit(3);
     }
+
+    // Step 1: Create a socket.
+    // int listenfd;
+    // listenfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    // if (listenfd < 0) {
+    //   // Couldn’t create the socket.
+    //   if (nc_args.verbose) {
+    //     perror("socket");
+    //   }
+    //   exit(2);
+    // }
+
+    
+    // Step 2: Configure the socket to a local port address.
+    // int bindError = bind(listenfd, res->ai_addr, res->ai_addrlen);
+    // if (bindError < 0) {
+    //   // Couldn’t bind the socket
+    //   if (nc_args.verbose) {
+    //     perror("bind");
+    //   }
+    //   close(listenfd);
+    //   exit(3);
+    // }
 
     //COMMENT OUT OLD WAY OF BINDING
 
@@ -263,14 +299,14 @@ int main(int argc, char * argv[]) {
 
     // Step 3: Start listening on the specified port
     const int QUEUELEN = 5;
-    int listenError = listen(listenfd, QUEUELEN);
+    int listenError = listen(sockfd, QUEUELEN);
     if (listenError) {
       // Couldn’t start listening, e.g., because
       //   someone else is using the same port
       if (nc_args.verbose) {
         perror("listen");
       }
-      close(listenfd);
+      close(sockfd);
       exit(4); 
     }
     
@@ -280,7 +316,7 @@ int main(int argc, char * argv[]) {
       // Accept a connection and find out who we’re talking to.
       struct sockaddr_in clientAddress;
       socklen_t clientAddressLength = sizeof(clientAddress);
-      int clientfd = accept(listenfd, (struct sockaddr*) &clientAddress, &clientAddressLength);
+      int clientfd = accept(sockfd, (struct sockaddr*) &clientAddress, &clientAddressLength);
       
       // Get the client’s IP address as a string
       const char MAX_DOTTED_IP_LEN = 15;
@@ -303,10 +339,11 @@ int main(int argc, char * argv[]) {
       }
       
       // Close the connection to this client
+      if (nc_args.verbose) {
+        // TODO: print a bandwidth measurement
+      }
       close(clientfd);
     }
-
-    freeaddrinfo(res); // free the linked list
 
   }
 
@@ -317,41 +354,72 @@ int main(int argc, char * argv[]) {
     // Setyp getaddrinfo section!
     int status;
     struct addrinfo hints;
-    struct addrinfo *res;  // will point to the results
+    struct addrinfo *servinfo, *p;  // will point to the results
+    // char s[INET6_ADDRSTRLEN];
 
     memset(&hints, 0, sizeof hints); // make sure the struct is empty
     hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
     hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
-    if ((status = getaddrinfo(nc_args.server, (char*) nc_args.port, &hints, &res)) != 0) {
+    if ((status = getaddrinfo(nc_args.server, (char*) nc_args.port, &hints, &servinfo)) != 0) {
       if (nc_args.verbose) {
         fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
       }
       exit(1);
     }
 
-    // fprintf(stderr, "Server at %s:%d\n", ipAddressBuffer, ntohs(serverAddress.sin_port));
-    
-    // Step 1: Create a socket for the connection.
-    int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (sockfd < 0) {
-      // Couldn’t create the socket.
+    int sockfd;
+    // loop through all the results and connect to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            //perror("client: socket");
+            continue;
+        }
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            //perror("client: connect");
+            continue;
+        }
+
+        break;
+    }
+
+    if (p == NULL) {
       if (nc_args.verbose) {
-        perror("socket");
+        perror("connect");
       }
       exit(2);
     }
 
+    // convert IP address to human-readable form
+    // inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+    //         s, sizeof s);
+    //printf("client: connecting to %s\n", s);
+
+    freeaddrinfo(servinfo); // all done with this structure
+
+    // Step 1: Create a socket for the connection.
+    // int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    // if (sockfd < 0) {
+    //   // Couldn’t create the socket.
+    //   if (nc_args.verbose) {
+    //     perror("socket");
+    //   }
+    //   exit(2);
+    // }
+
     // Step 2: Connect the socket to the remote server
-    int connectError = connect(sockfd, res->ai_addr, res->ai_addrlen);
-    if (connectError < 0) {
-      if (nc_args.verbose) {
-        perror("connect");
-      }
-      exit(3);
-    }
-    fprintf(stderr, "Connected to server.\n");
+    // int connectError = connect(sockfd, res->ai_addr, res->ai_addrlen);
+    // if (connectError < 0) {
+    //   if (nc_args.verbose) {
+    //     perror("connect");
+    //   }
+    //   exit(3);
+    // }
+    // fprintf(stderr, "Connected to server.\n");
 
     for(;;) {        // C "loop forever" idiom
 
@@ -360,15 +428,21 @@ int main(int argc, char * argv[]) {
 
       int nbytes = readline(sockfd, linebuffer, MAXLINE);
       if (nbytes < 0) {
-        perror("readLine");
+        if (nc_args.verbose) {
+          perror("readLine");
+        }
         exit (3);
       } else if (nbytes == 0) {
         // end of server output
         break; 
       }
-      printf("LINE: %s", linebuffer);
+      // stdout log the data we are receiving
+      printf("%s", linebuffer);
     }
 
+    if (nc_args.verbose) {
+      // TODO: print a bandwidth measurement
+    }
     close(sockfd);
     return 0;
   }
