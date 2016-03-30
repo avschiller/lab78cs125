@@ -1,8 +1,8 @@
+#define _XOPEN_SOURCE 600
 #include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 #include <getopt.h>
-#define _XOPEN_SOURCE 600
     // for ctime_r
 #include <arpa/inet.h>
     // for htonl, htons, inet_ntop, etc.
@@ -28,12 +28,13 @@
     // for close
 #include <sys/types.h>
 #include <netdb.h>
+#include <sys/time.h>
 
 /**
  * Structure to hold command-line arguments
  **/
 typedef struct nc_args {
-  unsigned short port; // server port
+  char* port; // server port
   char* server;        // remote server for an active connection
   bool listen;         // listen flag
   bool verbose;        // verbose output info
@@ -57,7 +58,7 @@ void parse_args(nc_args_t * nc_args, int argc, char * argv[]){
   nc_args->listen = 0;
   nc_args->verbose = false;
   nc_args->server = NULL;
-  nc_args->port = 0;
+  nc_args->port = NULL;
 
   int ch;
   while ((ch = getopt(argc, argv, "lv")) != -1) {
@@ -83,7 +84,7 @@ void parse_args(nc_args_t * nc_args, int argc, char * argv[]){
       fprintf(stderr, "ERROR: -l implies a single port argument\n");
       exit(1);
     } else {
-      nc_args->port = atoi(argv[0]);
+      nc_args->port = (argv[0]);
     }
 
   } else {
@@ -93,7 +94,7 @@ void parse_args(nc_args_t * nc_args, int argc, char * argv[]){
       exit(1);
     } else {
       nc_args->server = argv[0];
-      nc_args->port = atoi(argv[1]);
+      nc_args->port =argv[1];
     }
   }
 
@@ -186,13 +187,13 @@ int main(int argc, char * argv[]) {
             nc_args.verbose ? "true" : "false");
   fprintf(stderr, "Listening flag is %s\n",
             nc_args.listen ? "true" : "false");
-  fprintf(stderr, "Port is %d\n", nc_args.port);
+  fprintf(stderr, "Port is %s\n", nc_args.port);
   if (! nc_args.listen) {
     fprintf(stderr, "Server is %s\n", nc_args.server);
   }
 
   if (nc_args.listen){ // THE SERVER (listening)
-    
+    fprintf(stderr, "%s\n","I'm the server");
     // Step 0: Choose the server port, based on the command-line arguments.
     //int serv_port = nc_args.port;
 
@@ -217,9 +218,10 @@ int main(int argc, char * argv[]) {
     int sockfd;
     // loop through all the results and create the socket and bind to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
-      if ((sockfd = socket(p->ai_family, p->ai_socktype,
-              p->ai_protocol)) == -1) {
-          //perror("server: socket");
+      if ((sockfd = socket(p->ai_family, p->ai_socktype,p->ai_protocol)) == -1) {
+          if (nc_args.verbose){
+            perror("server: socket");
+          }
           continue;
       }
 
@@ -233,8 +235,10 @@ int main(int argc, char * argv[]) {
       }
 
       if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+        if (nc_args.verbose) {
+          perror("server: bind");
+        }
           close(sockfd);
-          //perror("server: bind");
           continue;
       }
 
@@ -242,60 +246,14 @@ int main(int argc, char * argv[]) {
     }
 
     freeaddrinfo(servinfo); // all done with this structure
+    fprintf(stderr, "%s\n","freed serv");
 
     if (p == NULL)  {
       if (nc_args.verbose) {
-        perror("bind");
+        fprintf(stderr, "server: failed to bind\n");
       }
       exit(3);
     }
-
-    // Step 1: Create a socket.
-    // int listenfd;
-    // listenfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    // if (listenfd < 0) {
-    //   // Couldn’t create the socket.
-    //   if (nc_args.verbose) {
-    //     perror("socket");
-    //   }
-    //   exit(2);
-    // }
-
-    
-    // Step 2: Configure the socket to a local port address.
-    // int bindError = bind(listenfd, res->ai_addr, res->ai_addrlen);
-    // if (bindError < 0) {
-    //   // Couldn’t bind the socket
-    //   if (nc_args.verbose) {
-    //     perror("bind");
-    //   }
-    //   close(listenfd);
-    //   exit(3);
-    // }
-
-    //COMMENT OUT OLD WAY OF BINDING
-
-    // struct sockaddr_in serverAddress;
-    // // First zero out the address struct, and then
-    // //   fill in the fields we care about.
-    // memset(&serverAddress, 0, sizeof(serverAddress));
-    // serverAddress.sin_family      = AF_INET;
-    // serverAddress.sin_port        = htons(serv_port);
-    // // Using IPv4 ...
-    // // listen for a connection on the
-    // //   specified port ...
-    // serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);  // on any network interface
-    // int bindError = bind(listenfd,
-    //                      (struct sockaddr*) &serverAddress,
-    //                      sizeof(serverAddress));
-    // if (bindError) {
-    //   // Couldn’t bind the socket
-    //   perror("bind");
-    //   close(listenfd);
-    //   exit(2);
-    // }
-    // fprintf(stderr, "Listening on port %d\n", serv_port);
-    
 
     // Step 3: Start listening on the specified port
     const int QUEUELEN = 5;
@@ -309,10 +267,11 @@ int main(int argc, char * argv[]) {
       close(sockfd);
       exit(4); 
     }
-    
+    fprintf(stderr, "%s\n","listened");
+
     // Handle each connection sequentially
     for(;;) {        // C "loop forever" idiom
-      
+      fprintf(stderr, "%s\n","for loop lol");
       // Accept a connection and find out who we’re talking to.
       struct sockaddr_in clientAddress;
       socklen_t clientAddressLength = sizeof(clientAddress);
@@ -327,17 +286,21 @@ int main(int argc, char * argv[]) {
       // Report the IP address for debugging purposes.
       fprintf(stderr, "Connection from %s\n", ipAddressBuffer);
       
-      // Get the current time as a string (with newline)
-      const char MAX_TIME_LEN = 25;
-      char timeBuffer[MAX_TIME_LEN + 1];
-      time_t secondsSinceEpoch = time(NULL);
-      ctime_r(&secondsSinceEpoch, timeBuffer);
-      
-      // Send the string to the client 10 times
-      for (int i = 0; i < 10; ++i) {
-        writen(clientfd, timeBuffer, strlen(timeBuffer));
+
+      const char MAXLINE = 80;
+      char linebuffer[MAXLINE];
+      int nread = readline(sockfd, linebuffer, MAXLINE);
+      while (nread > 0) {
+        printf("%.*s", nread, linebuffer);
+        nread = readline(sockfd, linebuffer, MAXLINE);
+        if (nread < 0) {
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","Error reading from client" );
+          }
+          exit(5);
+        }
       }
-      
+
       // Close the connection to this client
       if (nc_args.verbose) {
         // TODO: print a bandwidth measurement
@@ -352,6 +315,8 @@ int main(int argc, char * argv[]) {
     //int serv_port = nc_args.port;
     
     // Setyp getaddrinfo section!
+
+    fprintf(stderr, "%s\n","I'm the client");
     int status;
     struct addrinfo hints;
     struct addrinfo *servinfo, *p;  // will point to the results
@@ -362,31 +327,34 @@ int main(int argc, char * argv[]) {
     hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
-    if ((status = getaddrinfo(nc_args.server, (char*) nc_args.port, &hints, &servinfo)) != 0) {
+    if ((status = getaddrinfo(nc_args.server, nc_args.port, &hints, &servinfo)) != 0) {
       if (nc_args.verbose) {
         fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
       }
       exit(1);
     }
-
+    fprintf(stderr, "%s\n","Finished getaddrinfo");
     int sockfd;
     // loop through all the results and connect to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
+        fprintf(stderr, "%s\n","1");
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
             //perror("client: socket");
             continue;
         }
-
+        
+        fprintf(stderr, "%s\n","2");
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
             //perror("client: connect");
             continue;
         }
+        fprintf(stderr, "%s\n","in loop");
 
         break;
     }
-
+    fprintf(stderr, "%s\n","Connected to server");
     if (p == NULL) {
       if (nc_args.verbose) {
         perror("connect");
@@ -400,32 +368,33 @@ int main(int argc, char * argv[]) {
     //printf("client: connecting to %s\n", s);
 
     freeaddrinfo(servinfo); // all done with this structure
-
-    // Step 1: Create a socket for the connection.
-    // int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    // if (sockfd < 0) {
-    //   // Couldn’t create the socket.
-    //   if (nc_args.verbose) {
-    //     perror("socket");
-    //   }
-    //   exit(2);
-    // }
-
-    // Step 2: Connect the socket to the remote server
-    // int connectError = connect(sockfd, res->ai_addr, res->ai_addrlen);
-    // if (connectError < 0) {
-    //   if (nc_args.verbose) {
-    //     perror("connect");
-    //   }
-    //   exit(3);
-    // }
-    // fprintf(stderr, "Connected to server.\n");
-
+    fprintf(stderr, "%s\n","Freed servinfo");
+    const char MAXLINE = 80;
+    char linebuffer[MAXLINE];
+    int nread = readline(STDIN_FILENO, linebuffer, MAXLINE);
+    clock_t start = clock()
+    while (nread > 0) {
+      int nwrite = writen(sockfd, linebuffer, MAXLINE);
+      fprintf(stdout, "%s\n","writing stuff");
+      if (nwrite < 0){
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n","Error with writing to the server");
+        }
+        exit(5);
+      }
+      nread = readline(STDIN_FILENO, linebuffer, MAXLINE);
+    }
+    int shut_status =  shutdown(sockfd,1);
+    if(shut_status < 0) {
+      if (nc_args.verbose){
+        fprintf(stderr, "%s\n","Error in client shutdown");
+      }
+      exit(6);
+    }
+    clock_t end = clock()
+    float elapsed = (float)(end - start) / CLOCKS_PER_SEC;
+    
     for(;;) {        // C "loop forever" idiom
-
-      const char MAXLINE = 80;
-      char linebuffer[MAXLINE];
-
       int nbytes = readline(sockfd, linebuffer, MAXLINE);
       if (nbytes < 0) {
         if (nc_args.verbose) {
@@ -437,7 +406,9 @@ int main(int argc, char * argv[]) {
         break; 
       }
       // stdout log the data we are receiving
-      printf("%s", linebuffer);
+      if (nc_args.verbose){
+        printf("%s", linebuffer);
+      }
     }
 
     if (nc_args.verbose) {
