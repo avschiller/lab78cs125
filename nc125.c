@@ -271,7 +271,9 @@ int main(int argc, char * argv[]) {
 
     // Handle each connection sequentially
     for(;;) {        // C "loop forever" idiom
-      fprintf(stderr, "%s\n","for loop lol");
+      if (nc_args.verbose){
+        fprintf(stderr, "%s\n","Waiting for client to connect and send data");
+      }
       // Accept a connection and find out who we’re talking to.
       struct sockaddr_in clientAddress;
       socklen_t clientAddressLength = sizeof(clientAddress);
@@ -284,15 +286,19 @@ int main(int argc, char * argv[]) {
                 ipAddressBuffer, sizeof(ipAddressBuffer));
       
       // Report the IP address for debugging purposes.
-      fprintf(stderr, "Connection from %s\n", ipAddressBuffer);
-      
+      if (nc_args.verbose){
+        fprintf(stderr, "Connection from %s\n", ipAddressBuffer);
+      }
 
       const char MAXLINE = 80;
       char linebuffer[MAXLINE];
-      int nread = readline(sockfd, linebuffer, MAXLINE);
+      int nread = read(clientfd, linebuffer, MAXLINE);
       while (nread > 0) {
-        printf("%.*s", nread, linebuffer);
-        nread = readline(sockfd, linebuffer, MAXLINE);
+        //fprintf(stdout, "%s", nread, linebuffer);
+        // use fwrite so we write the proper amount of the buffer
+        fwrite(linebuffer, nread, 1, stdout);
+        //printf("%.*s", nread, linebuffer);
+        nread = read(clientfd, linebuffer, MAXLINE);
         if (nread < 0) {
           if (nc_args.verbose){
             fprintf(stderr, "%s\n","Error reading from client" );
@@ -300,12 +306,16 @@ int main(int argc, char * argv[]) {
           exit(5);
         }
       }
+      if (nc_args.verbose){
+        fprintf(stderr, "%s\n", "Client has finished sending their data" );
+      }
 
       // Close the connection to this client
       if (nc_args.verbose) {
         // TODO: print a bandwidth measurement
       }
       close(clientfd);
+      exit(6);
     }
 
   }
@@ -314,13 +324,12 @@ int main(int argc, char * argv[]) {
     // Step 0: Get the server ip and port, based on the command-line arguments.
     //int serv_port = nc_args.port;
     
-    // Setyp getaddrinfo section!
+    // Setup getaddrinfo section!
 
     fprintf(stderr, "%s\n","I'm the client");
     int status;
     struct addrinfo hints;
     struct addrinfo *servinfo, *p;  // will point to the results
-    // char s[INET6_ADDRSTRLEN];
 
     memset(&hints, 0, sizeof hints); // make sure the struct is empty
     hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
@@ -333,28 +342,35 @@ int main(int argc, char * argv[]) {
       }
       exit(1);
     }
-    fprintf(stderr, "%s\n","Finished getaddrinfo");
+
+    /// TODO: Print the address of the server we connected to
+    if (nc_args.verbose) {
+      fprintf(stderr, "%s\n","Finished getaddrinfo");
+    }
+
     int sockfd;
     // loop through all the results and connect to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
         fprintf(stderr, "%s\n","1");
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
-            //perror("client: socket");
+          if (nc_args.verbose) {
+            perror("client: socket");
+          }
             continue;
         }
         
         fprintf(stderr, "%s\n","2");
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            //perror("client: connect");
+            if (nc_args.verbose) {
+              perror("client: connect");
+            }
             continue;
         }
-        fprintf(stderr, "%s\n","in loop");
-
         break;
     }
-    fprintf(stderr, "%s\n","Connected to server");
+
     if (p == NULL) {
       if (nc_args.verbose) {
         perror("connect");
@@ -362,47 +378,62 @@ int main(int argc, char * argv[]) {
       exit(2);
     }
 
+    // TODO: print the server address
+    fprintf(stderr, "%s\n","Connected to server");
+
+    char ip4[INET_ADDRSTRLEN];  // A bit hacky, just assumed it is an IPv4.
+    inet_ntop(AF_INET, &(((struct sockaddr_in*)(servinfo->ai_addr))->sin_addr), ip4, INET_ADDRSTRLEN);
+    printf("hostaddr is : %s\n", ip4);
     // convert IP address to human-readable form
+    // char s[INET6_ADDRSTRLEN];
     // inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
     //         s, sizeof s);
-    //printf("client: connecting to %s\n", s);
+    // if (nc_args.verbose) {
+    //     fprintf(stderr, "client: connecting to %s\n", s);
+    // }
 
     freeaddrinfo(servinfo); // all done with this structure
-    fprintf(stderr, "%s\n","Freed servinfo");
+
     const char MAXLINE = 80;
     char linebuffer[MAXLINE];
-    int nread = readline(STDIN_FILENO, linebuffer, MAXLINE);
-    clock_t start = clock()
+    int nread = read(STDIN_FILENO, linebuffer, MAXLINE);
+    clock_t start = clock();
     while (nread > 0) {
-      int nwrite = writen(sockfd, linebuffer, MAXLINE);
-      fprintf(stdout, "%s\n","writing stuff");
+      int nwrite = writen(sockfd, linebuffer, nread);
+      //fprintf(stdout, "%s\n","writing stuff");
       if (nwrite < 0){
         if (nc_args.verbose){
           fprintf(stderr, "%s\n","Error with writing to the server");
         }
         exit(5);
       }
-      nread = readline(STDIN_FILENO, linebuffer, MAXLINE);
+      nread = read(STDIN_FILENO, linebuffer, MAXLINE);
     }
-    int shut_status =  shutdown(sockfd,1);
+    int shut_status =  shutdown(sockfd, SHUT_WR);
     if(shut_status < 0) {
       if (nc_args.verbose){
         fprintf(stderr, "%s\n","Error in client shutdown");
       }
       exit(6);
     }
-    clock_t end = clock()
+    if (nc_args.verbose){
+      fprintf(stderr, "%s\n","Half Close the connection using shutdown");
+    }
+    clock_t end = clock();
     float elapsed = (float)(end - start) / CLOCKS_PER_SEC;
     
     for(;;) {        // C "loop forever" idiom
-      int nbytes = readline(sockfd, linebuffer, MAXLINE);
+      int nbytes = readn(sockfd, linebuffer, MAXLINE);
       if (nbytes < 0) {
         if (nc_args.verbose) {
-          perror("readLine");
+          perror("readn");
         }
         exit (3);
       } else if (nbytes == 0) {
         // end of server output
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n","Nothing more to read from server");
+        }
         break; 
       }
       // stdout log the data we are receiving
@@ -417,7 +448,5 @@ int main(int argc, char * argv[]) {
     close(sockfd);
     return 0;
   }
-
-
 
 }
