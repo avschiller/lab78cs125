@@ -38,6 +38,8 @@ typedef struct nc_args {
   char* server;        // remote server for an active connection
   bool listen;         // listen flag
   bool verbose;        // verbose output info
+  bool udp;
+  bool udpProtected;
 } nc_args_t;
 
 
@@ -59,6 +61,8 @@ void parse_args(nc_args_t * nc_args, int argc, char * argv[]){
   nc_args->verbose = false;
   nc_args->server = NULL;
   nc_args->port = NULL;
+  nc_args->udp = false;
+  nc_args->udpProtected = false;
 
   int ch;
   while ((ch = getopt(argc, argv, "lv")) != -1) {
@@ -68,6 +72,12 @@ void parse_args(nc_args_t * nc_args, int argc, char * argv[]){
       break;
     case 'v':
       nc_args->verbose = true;
+      break;
+    case 'u':
+      nc_args->udp = true;
+      break;
+    case 'U':
+      nc_args->udpProtected = true;
       break;
     default:
       fprintf(stderr,"ERROR: Unknown option '-%c'\n",ch);
@@ -174,6 +184,18 @@ ssize_t readline(int fd, char *buffer, size_t maxlen)
 }
 
 
+// Sets up the server for UDP transfer protocol
+void server_udp(nc_args_t nc_args) {
+
+
+
+
+
+}
+
+
+
+
 int main(int argc, char * argv[]) {
 
   nc_args_t nc_args;
@@ -191,9 +213,17 @@ int main(int argc, char * argv[]) {
   if (! nc_args.listen) {
     fprintf(stderr, "Server is %s\n", nc_args.server);
   }
+  if (nc_args.udp) {
+    fprintf(stderr, "Using UDP");
+  } else if (nc_args.udpProtected) {
+    fprintf(stderr, "Using Smart UDP");
+  } else {
+    fprintf(stderr, "Using TCP");
+  }
+
 
   if (nc_args.listen){ // THE SERVER (listening)
-    fprintf(stderr, "%s\n","I'm the server");
+    fprintf(stderr, "%s\n","Setting up the server");
     // Step 0: Choose the server port, based on the command-line arguments.
     //int serv_port = nc_args.port;
 
@@ -205,7 +235,15 @@ int main(int argc, char * argv[]) {
 
     memset(&hints, 0, sizeof hints); // make sure the struct is empty
     hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
-    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+
+    // choose whether we are using TCP or UDP
+    int protocol;
+    if (nc_args.udp) {
+      protocol = SOCK_DGRAM;
+    } else {
+      protocol = SOCK_STREAM;
+    }
+    hints.ai_socktype = protocol; // protocol stream sockets
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
     if ((status = getaddrinfo(NULL, (char*) nc_args.port, &hints, &servinfo)) != 0) {
@@ -255,66 +293,99 @@ int main(int argc, char * argv[]) {
       exit(3);
     }
 
-    // Step 3: Start listening on the specified port
-    const int QUEUELEN = 5;
-    int listenError = listen(sockfd, QUEUELEN);
-    if (listenError) {
-      // Couldn’t start listening, e.g., because
-      //   someone else is using the same port
-      if (nc_args.verbose) {
-        perror("listen");
-      }
-      close(sockfd);
-      exit(4); 
-    }
-    fprintf(stderr, "%s\n","listened");
 
-    // Handle each connection sequentially
-    for(;;) {        // C "loop forever" idiom
-      if (nc_args.verbose){
-        fprintf(stderr, "%s\n","Waiting for client to connect and send data");
-      }
-      // Accept a connection and find out who we’re talking to.
-      struct sockaddr_in clientAddress;
-      socklen_t clientAddressLength = sizeof(clientAddress);
-      int clientfd = accept(sockfd, (struct sockaddr*) &clientAddress, &clientAddressLength);
-      
-      // Get the client’s IP address as a string
-      const char MAX_DOTTED_IP_LEN = 15;
-      char ipAddressBuffer[MAX_DOTTED_IP_LEN + 1];  // Don’t forget \0
-      inet_ntop(AF_INET, &clientAddress.sin_addr.s_addr,
-                ipAddressBuffer, sizeof(ipAddressBuffer));
-      
-      // Report the IP address for debugging purposes.
-      if (nc_args.verbose){
-        fprintf(stderr, "Connection from %s\n", ipAddressBuffer);
-      }
 
-      const char MAXLINE = 80;
-      char linebuffer[MAXLINE];
-      int nread = read(clientfd, linebuffer, MAXLINE);
-      while (nread > 0) {
-        //fprintf(stdout, "%s", nread, linebuffer);
-        // use fwrite so we write the proper amount of the buffer
-        fwrite(linebuffer, nread, 1, stdout);
-        //printf("%.*s", nread, linebuffer);
-        nread = read(clientfd, linebuffer, MAXLINE);
-        if (nread < 0) {
-          if (nc_args.verbose){
-            fprintf(stderr, "%s\n","Error reading from client" );
+    if (nc_args.udp) {
+      const int DATAGRAMSIZE = 1200;
+      char buffer[DATAGRAMSIZE];
+      struct sockaddr *from;
+      struct sockaddr_storage addr;
+      socklen_t fromlen;
+
+      // receive datagrams from the client and print to stdout
+      for (;;) {
+        int recvBytes = recvfrom(sockfd, buffer, DATAGRAMSIZE, 0, &addr, &fromlen); 
+        if (recvBytes < 0) {
+          if (nc_args.verbose) {
+            fprintf(stderr, "receivefrom failed\n");
           }
-          exit(5);
+          exit(4);
+        }
+        if (recvBytes > 0) {
+          fwrite(buffer[1], recvBytes-1, 1, stdout);
+          // Check if this is the last datagram to be received
+          if (buffer[0] == '0') {
+            break;
+          }
         }
       }
-      if (nc_args.verbose){
-        fprintf(stderr, "%s\n", "Client has finished sending their data" );
-      }
+      close(sockfd);
+    }
 
-      // Close the connection to this client
-      if (nc_args.verbose) {
-        // TODO: print a bandwidth measurement
+
+    // DO TCP
+    else {
+      // Step 3: Start listening on the specified port
+      const int QUEUELEN = 5;
+      int listenError = listen(sockfd, QUEUELEN);
+      if (listenError) {
+        // Couldn’t start listening, e.g., because
+        //   someone else is using the same port
+        if (nc_args.verbose) {
+          perror("listen");
+        }
+        close(sockfd);
+        exit(4); 
       }
-      close(clientfd);
+      fprintf(stderr, "%s\n","listened");
+
+      // Handle each connection sequentially
+      for(;;) {        // C "loop forever" idiom
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n","Waiting for client to connect and send data");
+        }
+        // Accept a connection and find out who we’re talking to.
+        struct sockaddr_in clientAddress;
+        socklen_t clientAddressLength = sizeof(clientAddress);
+        int clientfd = accept(sockfd, (struct sockaddr*) &clientAddress, &clientAddressLength);
+        
+        // Get the client’s IP address as a string
+        const char MAX_DOTTED_IP_LEN = 15;
+        char ipAddressBuffer[MAX_DOTTED_IP_LEN + 1];  // Don’t forget \0
+        inet_ntop(AF_INET, &clientAddress.sin_addr.s_addr,
+                  ipAddressBuffer, sizeof(ipAddressBuffer));
+        
+        // Report the IP address for debugging purposes.
+        if (nc_args.verbose){
+          fprintf(stderr, "Connection from %s\n", ipAddressBuffer);
+        }
+
+        const char MAXLINE = 80;
+        char linebuffer[MAXLINE];
+        int nread = read(clientfd, linebuffer, MAXLINE);
+        while (nread > 0) {
+          //fprintf(stdout, "%s", nread, linebuffer);
+          // use fwrite so we write the proper amount of the buffer
+          fwrite(linebuffer, nread, 1, stdout);
+          //printf("%.*s", nread, linebuffer);
+          nread = read(clientfd, linebuffer, MAXLINE);
+          if (nread < 0) {
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","Error reading from client" );
+            }
+            exit(5);
+          }
+        }
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n", "Client has finished sending their data" );
+        }
+
+        // Close the connection to this client
+        if (nc_args.verbose) {
+          // TODO: print a bandwidth measurement
+        }
+        close(clientfd);
+      }
       exit(6);
     }
 
@@ -437,9 +508,7 @@ int main(int argc, char * argv[]) {
         break; 
       }
       // stdout log the data we are receiving
-      if (nc_args.verbose){
-        printf("%s", linebuffer);
-      }
+      printf("%s", linebuffer);
     }
 
     if (nc_args.verbose) {
