@@ -65,7 +65,7 @@ void parse_args(nc_args_t * nc_args, int argc, char * argv[]){
   nc_args->udpProtected = false;
 
   int ch;
-  while ((ch = getopt(argc, argv, "lv")) != -1) {
+  while ((ch = getopt(argc, argv, "lvuU")) != -1) {
     switch (ch) {
     case 'l': //listen
       nc_args->listen = true;
@@ -294,17 +294,18 @@ int main(int argc, char * argv[]) {
     }
 
 
-
+    // Do UDP
     if (nc_args.udp) {
       const int DATAGRAMSIZE = 1200;
       char buffer[DATAGRAMSIZE];
-      struct sockaddr *from;
-      struct sockaddr_storage addr;
+      //struct sockaddr *from;
+      struct sockaddr_in addr;
       socklen_t fromlen;
 
       // receive datagrams from the client and print to stdout
       for (;;) {
-        int recvBytes = recvfrom(sockfd, buffer, DATAGRAMSIZE, 0, &addr, &fromlen); 
+        int recvBytes = recvfrom(sockfd, buffer, DATAGRAMSIZE, 0, (struct sockaddr *)&addr, &fromlen); 
+        fprintf(stderr, "received bytes\n");
         if (recvBytes < 0) {
           if (nc_args.verbose) {
             fprintf(stderr, "receivefrom failed\n");
@@ -312,9 +313,15 @@ int main(int argc, char * argv[]) {
           exit(4);
         }
         if (recvBytes > 0) {
-          fwrite(buffer[1], recvBytes-1, 1, stdout);
+          fprintf(stderr, "received %d bytes\n", recvBytes);
+          //fprintf(stdout, buffer+1, recvBytes-1);
+          //fprintf(stdout, buffer+1, recvBytes-1);
+          fwrite(buffer+1, recvBytes-1, 1, stdout);
+          fflush(stdout);
+          //fwrite(buffer+1, recvBytes-1, 1, stdout);
           // Check if this is the last datagram to be received
           if (buffer[0] == '0') {
+            fprintf(stderr, "closing the connection now");
             break;
           }
         }
@@ -322,6 +329,48 @@ int main(int argc, char * argv[]) {
       close(sockfd);
     }
 
+    // Do Better UDP
+    if (nc_args.udpProtected) {
+      const int DATAGRAMSIZE = 1200;
+      char buffer[DATAGRAMSIZE];
+      //struct sockaddr *from;
+      struct sockaddr_in addr;
+      socklen_t fromlen;
+
+      // receive datagrams from the client and print to stdout
+      for (;;) {
+        int recvBytes = recvfrom(sockfd, buffer, DATAGRAMSIZE, 0, (struct sockaddr *)&addr, &fromlen); 
+        fprintf(stderr, "received bytes\n");
+        if (recvBytes < 0) {
+          if (nc_args.verbose) {
+            fprintf(stderr, "receivefrom failed\n");
+          }
+          exit(4);
+        }
+        if (recvBytes > 0) {
+          fprintf(stderr, "received %d bytes\n", recvBytes);
+          //fprintf(stdout, buffer+1, recvBytes-1);
+          //fprintf(stdout, buffer+1, recvBytes-1);
+          fwrite(buffer+1, recvBytes-1, 1, stdout);
+          fflush(stdout);
+          //fwrite(buffer+1, recvBytes-1, 1, stdout);
+
+          // ACK the Client
+          int reply = sendto(sockfd, buffer, recvBytes, 0, addr->ai_addr, addr->ai_addrlen);
+          if (reply < 0) {
+            fprintf(stderr, "Error while acking");
+            exit(5);
+          }
+
+          // Check if this is the last datagram to be received
+          if (buffer[0] == '0') {
+            fprintf(stderr, "closing the connection now");
+            break;
+          }
+        }
+      }
+      close(sockfd);
+    }
 
     // DO TCP
     else {
@@ -367,6 +416,7 @@ int main(int argc, char * argv[]) {
           //fprintf(stdout, "%s", nread, linebuffer);
           // use fwrite so we write the proper amount of the buffer
           fwrite(linebuffer, nread, 1, stdout);
+          fflush(stdout); 
           //printf("%.*s", nread, linebuffer);
           nread = read(clientfd, linebuffer, MAXLINE);
           if (nread < 0) {
@@ -404,7 +454,15 @@ int main(int argc, char * argv[]) {
 
     memset(&hints, 0, sizeof hints); // make sure the struct is empty
     hints.ai_family = AF_UNSPEC;     // don't care IPv4 or IPv6
-    hints.ai_socktype = SOCK_STREAM; // TCP stream sockets
+
+    // choose whether we are using TCP or UDP
+    int protocol;
+    if (nc_args.udp) {
+      protocol = SOCK_DGRAM;
+    } else {
+      protocol = SOCK_STREAM;
+    }
+    hints.ai_socktype = protocol; // protocol stream sockets
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
     if ((status = getaddrinfo(nc_args.server, nc_args.port, &hints, &servinfo)) != 0) {
@@ -420,8 +478,10 @@ int main(int argc, char * argv[]) {
     }
 
     int sockfd;
-    // loop through all the results and connect to the first we can
-    for(p = servinfo; p != NULL; p = p->ai_next) {
+
+    // Communicating with UDP
+    if (nc_args.udp) {
+      for(p = servinfo; p != NULL; p = p->ai_next) {
         fprintf(stderr, "%s\n","1");
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
@@ -430,85 +490,207 @@ int main(int argc, char * argv[]) {
           }
             continue;
         }
-        
-        fprintf(stderr, "%s\n","2");
-        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(sockfd);
-            if (nc_args.verbose) {
-              perror("client: connect");
-            }
-            continue;
-        }
-        break;
-    }
-
-    if (p == NULL) {
-      if (nc_args.verbose) {
-        perror("connect");
       }
-      exit(2);
-    }
+      fprintf(stderr, "%s\n","Created Socket");
 
-    // TODO: print the server address
-    fprintf(stderr, "%s\n","Connected to server");
+      freeaddrinfo(servinfo); // all done with this structure
 
-    char ip4[INET_ADDRSTRLEN];  // A bit hacky, just assumed it is an IPv4.
-    inet_ntop(AF_INET, &(((struct sockaddr_in*)(servinfo->ai_addr))->sin_addr), ip4, INET_ADDRSTRLEN);
-    printf("hostaddr is : %s\n", ip4);
-    // convert IP address to human-readable form
-    // char s[INET6_ADDRSTRLEN];
-    // inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
-    //         s, sizeof s);
-    // if (nc_args.verbose) {
-    //     fprintf(stderr, "client: connecting to %s\n", s);
-    // }
 
-    freeaddrinfo(servinfo); // all done with this structure
+      // Write from stdin
+      const char MAXLINE = 80;
+      char linebuffer[MAXLINE];
+      int nread = read(STDIN_FILENO, linebuffer+1, MAXLINE-1);
+      linebuffer[0] = '1';
+      clock_t start = clock();
+      while (nread > 0) {
+        int nwrite = sendto(sockfd, linebuffer, nread, 0, servinfo->ai_addr, servinfo->ai_addrlen);
 
-    const char MAXLINE = 80;
-    char linebuffer[MAXLINE];
-    int nread = read(STDIN_FILENO, linebuffer, MAXLINE);
-    clock_t start = clock();
-    while (nread > 0) {
-      int nwrite = writen(sockfd, linebuffer, nread);
-      //fprintf(stdout, "%s\n","writing stuff");
+        if (nwrite < 0){
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","Error with writing to the server");
+          }
+          exit(5);
+        }
+        fprintf(stderr, "%s\n","sending stuff");
+
+        nread = read(STDIN_FILENO, linebuffer+1, MAXLINE-1);
+        linebuffer[0] = '1';
+      }
+      // need to tell server we are done sending info
+      fprintf(stderr, "%s\n","sending terminal stuff");
+      int nwrite = sendto(sockfd, "0", strlen("0"), 0, servinfo->ai_addr, servinfo->ai_addrlen);
       if (nwrite < 0){
         if (nc_args.verbose){
           fprintf(stderr, "%s\n","Error with writing to the server");
         }
         exit(5);
       }
-      nread = read(STDIN_FILENO, linebuffer, MAXLINE);
+
     }
-    int shut_status =  shutdown(sockfd, SHUT_WR);
-    if(shut_status < 0) {
-      if (nc_args.verbose){
-        fprintf(stderr, "%s\n","Error in client shutdown");
-      }
-      exit(6);
-    }
-    if (nc_args.verbose){
-      fprintf(stderr, "%s\n","Half Close the connection using shutdown");
-    }
-    clock_t end = clock();
-    float elapsed = (float)(end - start) / CLOCKS_PER_SEC;
-    
-    for(;;) {        // C "loop forever" idiom
-      int nbytes = readn(sockfd, linebuffer, MAXLINE);
-      if (nbytes < 0) {
-        if (nc_args.verbose) {
-          perror("readn");
+
+    // Communicating with UDP with ACKs!
+    else if (nc_args.udpProtected) {
+      for(p = servinfo; p != NULL; p = p->ai_next) {
+        fprintf(stderr, "%s\n","1");
+        if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+          if (nc_args.verbose) {
+            perror("client: socket");
+          }
+            continue;
         }
-        exit (3);
-      } else if (nbytes == 0) {
-        // end of server output
+      }
+      fprintf(stderr, "%s\n","Created Socket");
+
+      freeaddrinfo(servinfo); // all done with this structure
+
+
+      // Write from stdin
+      const char MAXLINE = 80;
+      char linebuffer[MAXLINE];
+      char ackbuffer[20];
+      int sequenceNum = 1;
+      int nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
+      // copy the sequence number into the first 2 bytes of buffer
+      memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+      //linebuffer[0] = string(sequenceNum);
+      clock_t start = clock();
+      while (nread > 0) {
+        int nwrite = sendto(sockfd, linebuffer, nread, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+
+        if (nwrite < 0){
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","Error with writing to the server");
+          }
+          exit(5);
+        }
+        fprintf(stderr, "%s\n","sending stuff");
+
+        // Wait for ACK from Server
+        int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, servinfo->ai_addr, servinfo->ai_addrlen); 
+        if (recvBytes < 0) {
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","Error with receiving to the server");
+          }
+          exit(6);
+
+          // check if ackbuffer matches the sequence number TODOOOOO
+        }
+
+        // The server verified receiving it!
+        sequenceNum++;
+        int nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
+        // copy the sequence number into the first 2 bytes of buffer
+        memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+      }
+      // need to tell server we are done sending info
+      fprintf(stderr, "%s\n","sending terminal stuff");
+      int nwrite = sendto(sockfd, "0", strlen("0"), 0, servinfo->ai_addr, servinfo->ai_addrlen);
+      if (nwrite < 0){
         if (nc_args.verbose){
-          fprintf(stderr, "%s\n","Nothing more to read from server");
+          fprintf(stderr, "%s\n","Error with writing to the server");
         }
-        break; 
+        exit(5);
       }
-      // stdout log the data we are receiving
-      printf("%s", linebuffer);
+
+    }
+
+
+
+
+    // Communicating with TCP
+    else {
+
+      // loop through all the results and connect to the first we can
+      for(p = servinfo; p != NULL; p = p->ai_next) {
+          fprintf(stderr, "%s\n","1");
+          if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                  p->ai_protocol)) == -1) {
+            if (nc_args.verbose) {
+              perror("client: socket");
+            }
+              continue;
+          }
+          
+          fprintf(stderr, "%s\n","2");
+          if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+              close(sockfd);
+              if (nc_args.verbose) {
+                perror("client: connect");
+              }
+              continue;
+          }
+          break;
+      }
+
+      if (p == NULL) {
+        if (nc_args.verbose) {
+          perror("connect");
+        }
+        exit(2);
+      }
+
+      // TODO: print the server address
+      fprintf(stderr, "%s\n","Connected to server");
+
+      char ip4[INET_ADDRSTRLEN];  // A bit hacky, just assumed it is an IPv4.
+      inet_ntop(AF_INET, &(((struct sockaddr_in*)(servinfo->ai_addr))->sin_addr), ip4, INET_ADDRSTRLEN);
+      printf("hostaddr is : %s\n", ip4);
+      // convert IP address to human-readable form
+      // char s[INET6_ADDRSTRLEN];
+      // inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+      //         s, sizeof s);
+      // if (nc_args.verbose) {
+      //     fprintf(stderr, "client: connecting to %s\n", s);
+      // }
+
+      freeaddrinfo(servinfo); // all done with this structure
+
+      const char MAXLINE = 80;
+      char linebuffer[MAXLINE];
+      int nread = read(STDIN_FILENO, linebuffer, MAXLINE);
+      clock_t start = clock();
+      while (nread > 0) {
+        int nwrite = writen(sockfd, linebuffer, nread);
+        //fprintf(stdout, "%s\n","writing stuff");
+        if (nwrite < 0){
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","Error with writing to the server");
+          }
+          exit(5);
+        }
+        nread = read(STDIN_FILENO, linebuffer, MAXLINE);
+      }
+      int shut_status =  shutdown(sockfd, SHUT_WR);
+      if(shut_status < 0) {
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n","Error in client shutdown");
+        }
+        exit(6);
+      }
+      if (nc_args.verbose){
+        fprintf(stderr, "%s\n","Half Close the connection using shutdown");
+      }
+      clock_t end = clock();
+      float elapsed = (float)(end - start) / CLOCKS_PER_SEC;
+      
+      for(;;) {        // C "loop forever" idiom
+        int nbytes = readn(sockfd, linebuffer, MAXLINE);
+        if (nbytes < 0) {
+          if (nc_args.verbose) {
+            perror("readn");
+          }
+          exit (3);
+        } else if (nbytes == 0) {
+          // end of server output
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","Nothing more to read from server");
+          }
+          break; 
+        }
+        // stdout log the data we are receiving
+        printf("%s", linebuffer);
+      }
     }
 
     if (nc_args.verbose) {
