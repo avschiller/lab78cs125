@@ -238,7 +238,7 @@ int main(int argc, char * argv[]) {
 
     // choose whether we are using TCP or UDP
     int protocol;
-    if (nc_args.udp) {
+    if (nc_args.udp || nc_args.udpProtected) {
       protocol = SOCK_DGRAM;
     } else {
       protocol = SOCK_STREAM;
@@ -313,9 +313,10 @@ int main(int argc, char * argv[]) {
           exit(4);
         }
         if (recvBytes > 0) {
-          fprintf(stderr, "received %d bytes\n", recvBytes);
-          //fprintf(stdout, buffer+1, recvBytes-1);
-          //fprintf(stdout, buffer+1, recvBytes-1);
+          if (nc_args.verbose) {
+            fprintf(stderr, "received %d bytes\n", recvBytes);
+          }       
+
           fwrite(buffer+1, recvBytes-1, 1, stdout);
           fflush(stdout);
           //fwrite(buffer+1, recvBytes-1, 1, stdout);
@@ -333,37 +334,42 @@ int main(int argc, char * argv[]) {
     if (nc_args.udpProtected) {
       const int DATAGRAMSIZE = 1200;
       char buffer[DATAGRAMSIZE];
+      char ackbuffer[DATAGRAMSIZE];
       //struct sockaddr *from;
       struct sockaddr_in addr;
-      socklen_t fromlen;
+      socklen_t fromlen = (socklen_t) sizeof addr;
 
       // receive datagrams from the client and print to stdout
       for (;;) {
         int recvBytes = recvfrom(sockfd, buffer, DATAGRAMSIZE, 0, (struct sockaddr *)&addr, &fromlen); 
-        fprintf(stderr, "received bytes\n");
         if (recvBytes < 0) {
           if (nc_args.verbose) {
+            perror("receive from failed");
             fprintf(stderr, "receivefrom failed\n");
           }
           exit(4);
         }
         if (recvBytes > 0) {
-          fprintf(stderr, "received %d bytes\n", recvBytes);
-          //fprintf(stdout, buffer+1, recvBytes-1);
-          //fprintf(stdout, buffer+1, recvBytes-1);
-          fwrite(buffer+1, recvBytes-1, 1, stdout);
+          if (nc_args.verbose) {
+            fprintf(stderr, "received %d bytes\n", recvBytes);
+          }
+          fwrite(buffer+2, recvBytes-2, 1, stdout);
           fflush(stdout);
-          //fwrite(buffer+1, recvBytes-1, 1, stdout);
 
+          // make what we are going to reply to the client to confirm message
+          memcpy(&ackbuffer, &buffer, 2);
+          //fromlen = sizeof(addr);
           // ACK the Client
-          int reply = sendto(sockfd, buffer, recvBytes, 0, addr->ai_addr, addr->ai_addrlen);
+          int reply = sendto(sockfd, ackbuffer, 2, 0, (struct sockaddr *) &addr, fromlen);
           if (reply < 0) {
+            perror("error while acking");
             fprintf(stderr, "Error while acking");
             exit(5);
           }
 
           // Check if this is the last datagram to be received
-          if (buffer[0] == '0') {
+          if (ackbuffer[0] == 0 && ackbuffer[1] == 0 ) {
+            fprintf(stderr, "the client is done sending the data");
             fprintf(stderr, "closing the connection now");
             break;
           }
@@ -457,7 +463,7 @@ int main(int argc, char * argv[]) {
 
     // choose whether we are using TCP or UDP
     int protocol;
-    if (nc_args.udp) {
+    if (nc_args.udp || nc_args.udpProtected) {
       protocol = SOCK_DGRAM;
     } else {
       protocol = SOCK_STREAM;
@@ -502,7 +508,7 @@ int main(int argc, char * argv[]) {
       int nread = read(STDIN_FILENO, linebuffer+1, MAXLINE-1);
       linebuffer[0] = '1';
       clock_t start = clock();
-      while (nread > 0) {
+      while (nread > 0) {//TODO should nread have +1
         int nwrite = sendto(sockfd, linebuffer, nread, 0, servinfo->ai_addr, servinfo->ai_addrlen);
 
         if (nwrite < 0){
@@ -546,46 +552,84 @@ int main(int argc, char * argv[]) {
 
 
       // Write from stdin
-      const char MAXLINE = 80;
+      const int MAXLINE = 1000;
       char linebuffer[MAXLINE];
       char ackbuffer[20];
-      int sequenceNum = 1;
-      int nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
-      // copy the sequence number into the first 2 bytes of buffer
-      memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
-      //linebuffer[0] = string(sequenceNum);
+      short sequenceNum = 1;
+      struct sockaddr_in addr;
+      socklen_t fromlen;
+      
       clock_t start = clock();
-      while (nread > 0) {
-        int nwrite = sendto(sockfd, linebuffer, nread, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+      int nread = 1;
+      while (true) {
+        bool packetWasReceived = false;
+        nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
+        // copy the sequence number into the first 2 bytes of buffer
+        memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+        for (int i = 0; i < nread+2; i++) {
+          fprintf(stderr, "%d\n", linebuffer[i]);
 
-        if (nwrite < 0){
-          if (nc_args.verbose){
-            fprintf(stderr, "%s\n","Error with writing to the server");
-          }
-          exit(5);
         }
-        fprintf(stderr, "%s\n","sending stuff");
+        if (nread < 0) {
+          break;
+        }
 
-        // Wait for ACK from Server
-        int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, servinfo->ai_addr, servinfo->ai_addrlen); 
-        if (recvBytes < 0) {
-          if (nc_args.verbose){
-            fprintf(stderr, "%s\n","Error with receiving to the server");
+        while (!packetWasReceived) {
+          int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+
+          if (nwrite < 0){
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","Error with writing to the server");
+            }
+            exit(5);
           }
-          exit(6);
+          fprintf(stderr, "%s\n","sending stuff");
 
+          // Wait for ACK from Server
+          // TODO what if the server doesn't respond...PROF STONEEEE...specify a time
+          // use select()
+          // clock_t startWait = clock();
+          // clock_t currentWait = clock();
+          // float maxWait = 0.1; // longest we want to wait for an ACK from the server
+          // while ((currentWait - startWait) < maxWait) {
+          //   nready = select()
+
+
+
+          // }
+
+
+
+          int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, (struct sockaddr *)&addr, &fromlen); 
+          if (recvBytes < 0) {
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","Error with receiving to the server");
+            }
+            exit(6);
+
+          }
           // check if ackbuffer matches the sequence number TODOOOOO
+          short sequenceReceived;
+          memcpy(&sequenceReceived, &ackbuffer, sizeof(sequenceNum));
+          if (sequenceReceived == sequenceNum) {
+            packetWasReceived = true;
+          }
         }
 
         // The server verified receiving it!
         sequenceNum++;
-        int nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
-        // copy the sequence number into the first 2 bytes of buffer
-        memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+
+        // // read the next line to be sent to the server
+        // int nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
+        // // copy the sequence number into the first 2 bytes of buffer
+        // //memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+        // linebuffer[0] = sequenceNum;
       }
+
       // need to tell server we are done sending info
       fprintf(stderr, "%s\n","sending terminal stuff");
-      int nwrite = sendto(sockfd, "0", strlen("0"), 0, servinfo->ai_addr, servinfo->ai_addrlen);
+      sequenceNum = 0;
+      int nwrite = sendto(sockfd, sequenceNum, strlen("0"), 0, servinfo->ai_addr, servinfo->ai_addrlen);
       if (nwrite < 0){
         if (nc_args.verbose){
           fprintf(stderr, "%s\n","Error with writing to the server");
