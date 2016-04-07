@@ -566,10 +566,10 @@ int main(int argc, char * argv[]) {
         nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
         // copy the sequence number into the first 2 bytes of buffer
         memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
-        for (int i = 0; i < nread+2; i++) {
-          fprintf(stderr, "%d\n", linebuffer[i]);
+        // for (int i = 0; i < nread+2; i++) {
+        //   fprintf(stderr, "%d\n", linebuffer[i]);
 
-        }
+        // }
         if (nread < 0) {
           break;
         }
@@ -588,32 +588,33 @@ int main(int argc, char * argv[]) {
           // Wait for ACK from Server
           // TODO what if the server doesn't respond...PROF STONEEEE...specify a time
           // use select()
-          // clock_t startWait = clock();
-          // clock_t currentWait = clock();
-          // float maxWait = 0.1; // longest we want to wait for an ACK from the server
-          // while ((currentWait - startWait) < maxWait) {
-          //   nready = select()
+          fd_set allset;
+          struct timeval timeOut; // longest we want to wait for an ACK from the server
+          timeOut.tv_usec = 100000; // 100 milliseconds
+          timeOut.tv_sec = 0;
+          FD_ZERO(&allset);
+          FD_SET(sockfd, &allset);   // Start out with a singleton set
+          
+          int nready = select(sockfd+1, &allset, NULL, NULL, &timeOut);
+          if (nready < 0) {
+            fprintf(stderr, "%s\n","select resulted in a timeout");
+          }
+          if (nready > 0) {
+            int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, (struct sockaddr *)&addr, &fromlen); 
+            if (recvBytes < 0) {
+              if (nc_args.verbose){
+                fprintf(stderr, "%s\n","Error with receiving to the server");
+              }
+              exit(6);
 
-
-
-          // }
-
-
-
-          int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, (struct sockaddr *)&addr, &fromlen); 
-          if (recvBytes < 0) {
-            if (nc_args.verbose){
-              fprintf(stderr, "%s\n","Error with receiving to the server");
             }
-            exit(6);
-
-          }
-          // check if ackbuffer matches the sequence number TODOOOOO
-          short sequenceReceived;
-          memcpy(&sequenceReceived, &ackbuffer, sizeof(sequenceNum));
-          if (sequenceReceived == sequenceNum) {
-            packetWasReceived = true;
-          }
+            // check if ackbuffer matches the sequence number TODOOOOO
+            short sequenceReceived;
+            memcpy(&sequenceReceived, &ackbuffer, sizeof(sequenceNum));
+            if (sequenceReceived == sequenceNum) {
+              packetWasReceived = true;
+            }
+          }          
         }
 
         // The server verified receiving it!
