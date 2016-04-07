@@ -336,11 +336,12 @@ int main(int argc, char * argv[]) {
       char buffer[DATAGRAMSIZE];
       char ackbuffer[DATAGRAMSIZE];
       //struct sockaddr *from;
-      struct sockaddr_in addr;
-      socklen_t fromlen = (socklen_t) sizeof addr;
+      struct sockaddr_storage addr;
+      socklen_t fromlen;
 
       // receive datagrams from the client and print to stdout
       for (;;) {
+        fromlen = sizeof(struct sockaddr_storage);          
         int recvBytes = recvfrom(sockfd, buffer, DATAGRAMSIZE, 0, (struct sockaddr *)&addr, &fromlen); 
         if (recvBytes < 0) {
           if (nc_args.verbose) {
@@ -556,7 +557,7 @@ int main(int argc, char * argv[]) {
       char linebuffer[MAXLINE];
       char ackbuffer[20];
       short sequenceNum = 1;
-      struct sockaddr_in addr;
+      struct sockaddr_storage addr;
       socklen_t fromlen;
       
       clock_t start = clock();
@@ -585,16 +586,15 @@ int main(int argc, char * argv[]) {
           }
           fprintf(stderr, "%s\n","sending stuff");
 
-          // Wait for ACK from Server
-          // TODO what if the server doesn't respond...PROF STONEEEE...specify a time
-          // use select()
+          // Wait for ACK from Server for a set amount of time
           fd_set allset;
           struct timeval timeOut; // longest we want to wait for an ACK from the server
-          timeOut.tv_usec = 100000; // 100 milliseconds
+          timeOut.tv_usec = 400000; // 400 milliseconds
           timeOut.tv_sec = 0;
           FD_ZERO(&allset);
           FD_SET(sockfd, &allset);   // Start out with a singleton set
-          
+          fromlen = sizeof(struct sockaddr_storage);          
+
           int nready = select(sockfd+1, &allset, NULL, NULL, &timeOut);
           if (nready < 0) {
             fprintf(stderr, "%s\n","select resulted in a timeout");
@@ -614,7 +614,7 @@ int main(int argc, char * argv[]) {
             if (sequenceReceived == sequenceNum) {
               packetWasReceived = true;
             }
-          }          
+          }
         }
 
         // The server verified receiving it!
@@ -639,7 +639,6 @@ int main(int argc, char * argv[]) {
       }
 
     }
-
 
 
 
