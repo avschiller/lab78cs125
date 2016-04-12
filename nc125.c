@@ -554,6 +554,7 @@ int main(int argc, char * argv[]) {
 
       // Write from stdin
       const int MAXLINE = 1000;
+      const int MAX_UNACK = 20;
       char linebuffer[MAXLINE];
       char ackbuffer[20];
       short sequenceNum = 1;
@@ -562,18 +563,119 @@ int main(int argc, char * argv[]) {
       
       clock_t start = clock();
       int nread = 1;
-      while (true) {
-        bool packetWasReceived = false;
-        nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
-        // copy the sequence number into the first 2 bytes of buffer
-        memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
-        // for (int i = 0; i < nread+2; i++) {
-        //   fprintf(stderr, "%d\n", linebuffer[i]);
+      int buffer_size = MAXLINE;
+      int length = MAX_UNACK;
+      int num_unack = 0;
+      int head = -1;
+      short sequenceQueue[length];
+      clock_t timeQueue[length];
+      char messQueue[(buffer_size+2) * length];
 
-        // }
-        if (nread < 0) {
-          break;
+      while (true) {
+        // send data if we are under the max unacked packets
+        if (num_unack < MAX_UNACK) {
+          // if there is nothing to read does it get stuck? use select?
+          nread = read(STDIN_FILENO, linebuffer+2, MAXLINE-2);
+          // copy the sequence number into the first 2 bytes of buffer
+          memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+
+          if (nread < 0) {
+            break;
+          }
+
+          sequenceQueue[head+num_unack % length] = sequenceNum;
+          timeQueue[head+num_unack % length] = clock();
+          memcpy(messQueue[(head+num_unack)*(buffer_size+2)], &nread, 2);
+          memcpy(messQueue[(head+num_unack)*(buffer_size+2) + 2], &(linebuffer+2), nread);
+
+          num_unack++;
+
+          int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+          if (nwrite < 0){
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","Error with writing to the server");
+            }
+            exit(5);
+          }
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","sending stuff");
+          }
+
+
+          sequenceNum++;
         }
+
+
+        // check if we have received acknowledgements!
+        // Wait for ACK from Server for a set amount of time
+        fd_set allset;
+        struct timeval timeOut; // longest we want to wait for an ACK from the server
+        timeOut.tv_usec = 10000; // 10 milliseconds
+        timeOut.tv_sec = 0;
+        FD_ZERO(&allset);
+        FD_SET(sockfd, &allset);   // Start out with a singleton set
+        fromlen = sizeof(struct sockaddr_storage);          
+
+        int nready = select(sockfd+1, &allset, NULL, NULL, &timeOut);
+        if (nready < 0) {
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","select resulted in a timeout, so nothing received from server");
+          }
+        }
+        if (nready > 0) {
+          int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, (struct sockaddr *)&addr, &fromlen); 
+          if (recvBytes < 0) {
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","Error with receiving to the server");
+            }
+            exit(6);
+          }
+          // check if ackbuffer matches the sequence number
+          short sequenceReceived;
+          memcpy(&sequenceReceived, &ackbuffer, sizeof(sequenceNum));
+
+          // check if the received ack matches the un-acked packet at the head
+          if (sequenceReceived == sequenceQueue[head % length]) {
+            head++;
+            num_unack--;
+          }
+          else if (sequenceReceived >= sequenceQueue[head % length]) {
+            while (sequenceReceived >= sequenceQueue[head % length]){
+              //use a different sequence number
+              memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+              sequenceNum++;
+              short mess_len;
+              memcpy(&mess_len,messQueue[head*(MAXLINE+2)], 2);
+              memcpy(&(linebuffer + 2), messQueue[head * (MAXLINE + 2) + 2], mess_len);
+              int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+              if (nwrite < 0){
+                if (nc_args.verbose){
+                  fprintf(stderr, "%s\n","Error with writing to the server");
+                }
+                exit(5);
+              }
+              if (nc_args.verbose){
+                fprintf(stderr, "%s\n","sending stuff");
+              }
+            } 
+          }
+        }
+
+
+
+        // check if any packets have been unacknowledged for too long
+
+
+
+
+
+
+      }
+
+
+       
+      
+
 
         while (!packetWasReceived) {
           int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
@@ -584,8 +686,9 @@ int main(int argc, char * argv[]) {
             }
             exit(5);
           }
-          fprintf(stderr, "%s\n","sending stuff");
-
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","sending stuff");
+          }
           // Wait for ACK from Server for a set amount of time
           fd_set allset;
           struct timeval timeOut; // longest we want to wait for an ACK from the server
