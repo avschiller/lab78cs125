@@ -1,0 +1,7 @@
+TODO
+should the head be initialized as -1 or 0
+bigendian little endian for logging the sequence number 
+
+using select when we want to read from stdin
+
+when the client quits, make sure the rest of the queue gets emptied/sent and acked
