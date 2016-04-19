@@ -716,8 +716,7 @@ int main(int argc, char * argv[]) {
               if (nc_args.verbose){
                   fprintf(stderr, "Resending packet number: %d  since an ACK has not been received within the timeOut.\n", oldSequenceNum);
               }
-              memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
-              sequenceNum++;
+              memcpy(&linebuffer, &oldSequenceNum, sizeof(sequenceNum));
               int mess_len;
               // copy the length of the message into a variable
               memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
@@ -843,8 +842,7 @@ int main(int argc, char * argv[]) {
             if (nc_args.verbose){
                 fprintf(stderr, "Resending packet number: %d  since an ACK has not been received within the timeOut.\n", oldSequenceNum);
             }
-            memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
-            sequenceNum++;
+            memcpy(&linebuffer, &oldSequenceNum, sizeof(sequenceNum));
             int mess_len;
             // copy the length of the message into a variable
             memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
