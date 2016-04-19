@@ -214,11 +214,11 @@ int main(int argc, char * argv[]) {
     fprintf(stderr, "Server is %s\n", nc_args.server);
   }
   if (nc_args.udp) {
-    fprintf(stderr, "Using UDP");
+    fprintf(stderr, "Using UDP \n");
   } else if (nc_args.udpProtected) {
-    fprintf(stderr, "Using Smart UDP");
+    fprintf(stderr, "Using Smart UDP \n");
   } else {
-    fprintf(stderr, "Using TCP");
+    fprintf(stderr, "Using TCP \n");
   }
 
 
@@ -456,8 +456,9 @@ int main(int argc, char * argv[]) {
     //int serv_port = nc_args.port;
     
     // Setup getaddrinfo section!
-
-    fprintf(stderr, "%s\n","I'm the client");
+    if (nc_args.verbose){
+      fprintf(stderr, "%s\n","I'm the client");
+    }
     int status;
     struct addrinfo hints;
     struct addrinfo *servinfo, *p;  // will point to the results
@@ -564,13 +565,15 @@ int main(int argc, char * argv[]) {
       struct sockaddr_storage addr;
       socklen_t fromlen;
       
-      clock_t start = clock();
+      struct timeval startTime, currTime, packetTime;
+      gettimeofday(&startTime, NULL);
+
       int nread = 1;
       int buffer_size = MAXLINE;
       int length = 0;
       int head = 0;
+      struct timeval timeQueue[MAX_UNACK];
       short sequenceQueue[MAX_UNACK];
-      clock_t timeQueue[MAX_UNACK];
       // add 4 to acount for the int to be stored at the beginning
       char messQueue[(buffer_size+4) * MAX_UNACK];
       
@@ -578,7 +581,7 @@ int main(int argc, char * argv[]) {
       // timeOut.tv_usec = 800000; // 800 milliseconds
       // timeOut.tv_sec = 0;
 
-      double timeOut = 0.8;
+      double timeOut = 5;
 
       struct timeval timeSelectCheck; // how long we want to wait while checking for ACK's with select
       timeSelectCheck.tv_usec = 1000; // 1 milliseconds
@@ -592,8 +595,9 @@ int main(int argc, char * argv[]) {
           fd_set allset;
           FD_ZERO(&allset);
           FD_SET(sockfd, &allset);   // Start out with a singleton set
-          
+
           int nready = select(STDIN_FILENO+1, &allset, NULL, NULL, &timeSelectCheck);
+          //fprintf(stderr, "stdin nready: %d.\n", nready);
           nready = 1;
           if (nready < 0) {
             if (nc_args.verbose){
@@ -606,16 +610,40 @@ int main(int argc, char * argv[]) {
             // copy the sequence number into the first 2 bytes of buffer
             memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
 
+            // if (nc_args.verbose){
+            //   fprintf(stderr, "%s\n","AFTER memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));");
+            //   for (int i = head; i < length+head; i++) {
+            //     fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            //     fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
+            //   }
+            // }
+
             if (nread < 0) {
               break;
             }
 
-            sequenceQueue[(head+length) % MAX_UNACK] = sequenceNum;
-            timeQueue[head+length % MAX_UNACK] = clock();
+            gettimeofday(&currTime, NULL);
+
+            // fprintf(stderr, "curr time is %ld is %d.\n", currTime.tv_sec, currTime.tv_usec);
+
+            memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
+            // if (nc_args.verbose){
+            //   fprintf(stderr, "%s\n","right before sequence memcpy and after timeQueue copy");
+            //   for (int i = head; i < length+head; i++) {
+            //     fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            //     fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
+            //   }
+            // }
+            memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &sequenceNum, sizeof(sequenceNum));
+            // if (nc_args.verbose){
+            //   fprintf(stderr, "%s\n","right AFTER sequencememcpy");
+            //   for (int i = head; i < length+head; i++) {
+            //     fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            //     fprintf(stderr, "logged timequeue number for index queue index %d is %ld, %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
+            //   }
+            // }
             memcpy(&messQueue[(head+length)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &nread, 4);
             memcpy(&messQueue[ ((head+length)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (linebuffer + 2), nread);
-
-            length++;
 
             int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
             if (nwrite < 0){
@@ -626,13 +654,21 @@ int main(int argc, char * argv[]) {
             }
             if (nc_args.verbose){
               fprintf(stderr, "sent a message to the server of sequence number %d, queue head is %d and length is: %d .\n", sequenceNum, head, length);
+              fprintf(stderr, "logged sequence number is %d.\n", sequenceQueue[(head+length) % MAX_UNACK]);
             }
+
+            length++;
             sequenceNum++;
           }
         }
-
+        
         // check if the oldest packet sent has timed out or if the queue is full
-        while ( (( (clock() - timeQueue[head % MAX_UNACK])/CLOCKS_PER_SEC) > timeOut ) || length == MAX_UNACK) {
+        gettimeofday(&currTime, NULL);
+        packetTime = timeQueue[head % MAX_UNACK];
+        int totalCurrTime = currTime.tv_sec + (currTime.tv_usec/1000000);
+        int totalPacketTime = packetTime.tv_sec + (packetTime.tv_usec/1000000);
+
+        while ( ( ((totalCurrTime - totalPacketTime) > timeOut ) || length == MAX_UNACK) && (length > 0) ) {
           // check if there is an ACK for this packet
           // check if we have received acknowledgements!
           fd_set allset;
@@ -640,16 +676,16 @@ int main(int argc, char * argv[]) {
           FD_SET(sockfd, &allset);   // Start out with a singleton set
           fromlen = sizeof(struct sockaddr_storage);          
           
+          int nready = select(sockfd+1, &allset, NULL, NULL, &timeSelectCheck);
           if (nc_args.verbose){
-              fprintf(stderr, "%s\n","checking for ack");
+              fprintf(stderr,"checking for ack, nready from server is: %d \n", nready);
           }
 
-          int nready = select(sockfd+1, &allset, NULL, NULL, &timeSelectCheck);
-          if (nready < 0) {
+          if (nready <= 0) {
             if (nc_args.verbose){
               fprintf(stderr, "%s\n","select resulted in a timeout, so nothing received from server");
             }
-            if ( ( (clock() - timeQueue[head % MAX_UNACK]) / CLOCKS_PER_SEC) > timeOut ) {
+            if ( (totalCurrTime - totalPacketTime) > timeOut ) {
               // this packet was not acknowledged in the timeOut given!
               // Resend the packet and adjust the timeOut value?
               //use a different sequence number for the packet being resent
@@ -697,7 +733,6 @@ int main(int argc, char * argv[]) {
             if (sequenceReceived == sequenceQueue[head % MAX_UNACK]) {
               int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
               if (nc_args.verbose){
-                  fprintf(stderr, "head value is: %d  \n", head);
                   fprintf(stderr, "confirmed packet number: %d  since a ACK was received of value %d \n", oldSequenceNum, sequenceReceived);
               }
               head++;
@@ -709,9 +744,9 @@ int main(int argc, char * argv[]) {
             else if (sequenceReceived >= sequenceQueue[head % MAX_UNACK]) {
               while (sequenceReceived > sequenceQueue[head % MAX_UNACK]){
                 //use a different sequence number for the packet being resent
-                int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
+                int oldSequenceNum;// = sequenceQueue[head % MAX_UNACK];
+                memcpy(&oldSequenceNum, &sequenceQueue[head % MAX_UNACK], 2);
                 if (nc_args.verbose){
-                  fprintf(stderr, "head value is: %d  \n", head);
                   fprintf(stderr, "Resending packet number: %d  since a latter ACK was received of value %d \n", oldSequenceNum, sequenceReceived);
                 }
                 memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
@@ -721,6 +756,12 @@ int main(int argc, char * argv[]) {
                 memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
                 // copy the old message into the line buffer
                 memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+                //copy the sequence number to the sequence queue
+                memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &sequenceNum, sizeof(sequenceNum));
+                //copy the time sent to the timequeue
+                gettimeofday(&currTime, NULL);
+                memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
+
                 int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
                 if (nwrite < 0){
                   if (nc_args.verbose){
@@ -738,11 +779,135 @@ int main(int argc, char * argv[]) {
               length--;
             } 
           }
+        gettimeofday(&currTime, NULL);
+        packetTime = timeQueue[head % MAX_UNACK];
+        totalCurrTime = currTime.tv_sec + (currTime.tv_usec/1000000);
+        totalPacketTime = packetTime.tv_sec + (packetTime.tv_usec/1000000);
         }
       }
 
+      //making sure the rest of messages were delivered
+      if (nc_args.verbose){
+        fprintf(stderr, "%s\n","done sending, but making sure the rest of the unacked messages get delivered");
+      }
+      gettimeofday(&currTime, NULL);
+      packetTime = timeQueue[head % MAX_UNACK];
+      int totalCurrTime = currTime.tv_sec + (currTime.tv_usec/1000000);
+      int totalPacketTime = packetTime.tv_sec + (packetTime.tv_usec/1000000);
+
+      while(length > 0) {
+        // check if we have received acknowledgements!
+        fd_set allset;
+        FD_ZERO(&allset);
+        FD_SET(sockfd, &allset);   // Start out with a singleton set
+        fromlen = sizeof(struct sockaddr_storage);          
+
+        int nready = select(sockfd+1, &allset, NULL, NULL, &timeSelectCheck);
+        if (nc_args.verbose){
+            fprintf(stderr,"checking for ack, nready from server is: %d \n", nready);
+        }
+
+        if (nready <= 0) {
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","select resulted in a timeout, so nothing received from server");
+          }
+          if ( (totalCurrTime - totalPacketTime) > timeOut ) {
+            // this packet was not acknowledged in the timeOut given!
+            // Resend the packet and adjust the timeOut value?
+            //use a different sequence number for the packet being resent
+            int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
+            if (nc_args.verbose){
+                fprintf(stderr, "Resending packet number: %d  since an ACK has not been received within the timeOut.\n", oldSequenceNum);
+            }
+            memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+            sequenceNum++;
+            int mess_len;
+            // copy the length of the message into a variable
+            memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
+            // copy the old message into the line buffer
+            memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+            int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+            if (nwrite < 0){
+              if (nc_args.verbose){
+                fprintf(stderr, "%s\n","Error with writing to the server");
+              }
+              exit(5);
+            }
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","sending stuff");
+            }
+            head++;
+          }
+        }
+        else if (nready > 0) {
+          int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, (struct sockaddr *)&addr, &fromlen); 
+          if (recvBytes < 0) {
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","Error with receiving to the server");
+            }
+            exit(6);
+          }
+          // check if ackbuffer matches the sequence number
+          short sequenceReceived;
+          memcpy(&sequenceReceived, &ackbuffer, sizeof(sequenceNum));
+          
+          if (nc_args.verbose){
+            fprintf(stderr, "Received an ACK number: %d  from the server.\n", sequenceReceived);
+          }
+          // check if the received ack matches the un-acked packet at the head
+          if (sequenceReceived == sequenceQueue[head % MAX_UNACK]) {
+            int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
+            if (nc_args.verbose){
+                fprintf(stderr, "confirmed packet number: %d  since a ACK was received of value %d \n", oldSequenceNum, sequenceReceived);
+            }
+            head++;
+            length--;
+          }
+          // otherwise we received an ACK for a message either already acked in which case we don't care
+          // or we received one for a later message in which case we must resend the earlier messages
+          // and then mark that one as ACKed
+          else if (sequenceReceived >= sequenceQueue[head % MAX_UNACK]) {
+            while (sequenceReceived > sequenceQueue[head % MAX_UNACK]){
+              //use a different sequence number for the packet being resent
+              int oldSequenceNum;// = sequenceQueue[head % MAX_UNACK];
+              memcpy(&oldSequenceNum, &sequenceQueue[head % MAX_UNACK], 2);
+              if (nc_args.verbose){
+                fprintf(stderr, "Resending packet number: %d  since a latter ACK was received of value %d \n", oldSequenceNum, sequenceReceived);
+              }
+              memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+              sequenceNum++;
+              int mess_len;
+              // copy the length of the message into a variable
+              memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
+              // copy the old message into the line buffer
+              memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+              int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+              if (nwrite < 0){
+                if (nc_args.verbose){
+                  fprintf(stderr, "%s\n","Error with writing to the server");
+                }
+                exit(5);
+              }
+              if (nc_args.verbose){
+                fprintf(stderr, "%s\n","sending stuff");
+              }
+              head++;
+            }
+            // now we can mark that that this message was ACKed
+            head++;
+            length--;
+          } 
+        }
+        gettimeofday(&currTime, NULL);
+        packetTime = timeQueue[head % MAX_UNACK];
+        totalCurrTime = currTime.tv_sec + (currTime.tv_usec/1000000);
+        totalPacketTime = packetTime.tv_sec + (packetTime.tv_usec/1000000);
+      }
+
       // need to tell server we are done sending info
-      fprintf(stderr, "%s\n","sending terminal message");
+      if (nc_args.verbose){
+        fprintf(stderr, "%s\n","sending terminal message");
+      }
       sequenceNum = 0;
       int nwrite = sendto(sockfd, sequenceNum, strlen("0"), 0, servinfo->ai_addr, servinfo->ai_addrlen);
       if (nwrite < 0){
@@ -857,3 +1022,133 @@ int main(int argc, char * argv[]) {
   }
 
 }
+
+
+
+
+/*
+void checkAck(timeQueue, sequenceQueue, messQueue, length, head, sockfd) {
+// check if the oldest packet sent has timed out or if the queue is full
+  struct timeval currTime, packetTime;
+  gettimeofday(&currTime, NULL);
+  packetTime = timeQueue[head % MAX_UNACK];
+  int totalCurrTime = currTime.tv_sec + (currTime.tv_usec/1000000);
+  int totalPacketTime = packetTime.tv_sec + (packetTime.tv_usec/1000000);
+  while ( ( ((totalCurrTime - totalPacketTime) > timeOut ) || length == MAX_UNACK) && (length > 0) ) {
+    // check if there is an ACK for this packet
+    // check if we have received acknowledgements!
+    fd_set allset;
+    FD_ZERO(&allset);
+    FD_SET(sockfd, &allset);   // Start out with a singleton set
+    fromlen = sizeof(struct sockaddr_storage);          
+    
+    int nready = select(sockfd+1, &allset, NULL, NULL, &timeSelectCheck);
+    if (nc_args.verbose){
+        fprintf(stderr,"checking for ack, nready from server is: %d \n", nready);
+    }
+
+    if (nready <= 0) {
+      if (nc_args.verbose){
+        fprintf(stderr, "%s\n","select resulted in a timeout, so nothing received from server");
+      }
+      if ( (totalCurrTime - totalPacketTime) > timeOut ) {
+        // this packet was not acknowledged in the timeOut given!
+        // Resend the packet and adjust the timeOut value?
+        //use a different sequence number for the packet being resent
+        int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
+        if (nc_args.verbose){
+            fprintf(stderr, "Resending packet number: %d  since an ACK has not been received within the timeOut.\n", oldSequenceNum);
+        }
+        memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+        sequenceNum++;
+        int mess_len;
+        // copy the length of the message into a variable
+        memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
+        // copy the old message into the line buffer
+        memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+        int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+        if (nwrite < 0){
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","Error with writing to the server");
+          }
+          exit(5);
+        }
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n","sending stuff");
+        }
+        head++;
+      }
+
+    }
+    else if (nready > 0) {
+      int recvBytes = recvfrom(sockfd, ackbuffer, MAXLINE, 0, (struct sockaddr *)&addr, &fromlen); 
+      if (recvBytes < 0) {
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n","Error with receiving to the server");
+        }
+        exit(6);
+      }
+      // check if ackbuffer matches the sequence number
+      short sequenceReceived;
+      memcpy(&sequenceReceived, &ackbuffer, sizeof(sequenceNum));
+      
+      if (nc_args.verbose){
+        fprintf(stderr, "Received an ACK number: %d  from the server.\n", sequenceReceived);
+      }
+      // check if the received ack matches the un-acked packet at the head
+      if (sequenceReceived == sequenceQueue[head % MAX_UNACK]) {
+        int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
+        if (nc_args.verbose){
+            fprintf(stderr, "confirmed packet number: %d  since a ACK was received of value %d \n", oldSequenceNum, sequenceReceived);
+        }
+        head++;
+        length--;
+      }
+      // otherwise we received an ACK for a message either already acked in which case we don't care
+      // or we received one for a later message in which case we must resend the earlier messages
+      // and then mark that one as ACKed
+      else if (sequenceReceived >= sequenceQueue[head % MAX_UNACK]) {
+        while (sequenceReceived > sequenceQueue[head % MAX_UNACK]){
+          //use a different sequence number for the packet being resent
+          int oldSequenceNum;// = sequenceQueue[head % MAX_UNACK];
+          memcpy(&oldSequenceNum, &sequenceQueue[head % MAX_UNACK], 2);
+          if (nc_args.verbose){
+            fprintf(stderr, "Resending packet number: %d  since a latter ACK was received of value %d \n", oldSequenceNum, sequenceReceived);
+          }
+          memcpy(&linebuffer, &sequenceNum, sizeof(sequenceNum));
+          sequenceNum++;
+          int mess_len;
+          // copy the length of the message into a variable
+          memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
+          // copy the old message into the line buffer
+          memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+          int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+          if (nwrite < 0){
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","Error with writing to the server");
+            }
+            exit(5);
+          }
+          if (nc_args.verbose){
+            fprintf(stderr, "%s\n","sending stuff");
+          }
+          head++;
+        }
+        // now we can mark that that this message was ACKed
+        head++;
+        length--;
+      } 
+    }
+  gettimeofday(&currTime, NULL);
+  packetTime = timeQueue[head % MAX_UNACK];
+  totalCurrTime = currTime.tv_sec + (currTime.tv_usec/1000000);
+  totalPacketTime = packetTime.tv_sec + (packetTime.tv_usec/1000000);
+  }
+
+  return NULL;
+}
+
+*/
+
+
+
