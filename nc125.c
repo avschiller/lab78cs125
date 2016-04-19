@@ -796,7 +796,7 @@ int main(int argc, char * argv[]) {
                   fprintf(stderr, "%s\n","sending stuff");
                 }
                 head++;
-                delay(1000);   // stop for 1 second                       
+                sleep(1);
               }
               // now we can mark that that this message was ACKed
               head++;
