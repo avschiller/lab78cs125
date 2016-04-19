@@ -375,7 +375,6 @@ int main(int argc, char * argv[]) {
             exit(5);
           }
           
-
           short receivedSeqNum;
           memcpy(&receivedSeqNum, &ackbuffer, 2);
           // print it if it's next to be printed
@@ -386,7 +385,7 @@ int main(int argc, char * argv[]) {
             fwrite(buffer+2, recvBytes-2, 1, stdout);
             fflush(stdout);
             currSequenceNum++;
-          } else { // this message shouldn't be displayed yet so we store it
+          } else if (receivedSeqNum > currSequenceNum) { // this message shouldn't be displayed yet so we store it
             memcpy(&sequenceArray[(receivedSeqNum) % MAX_UNACK], &ackbuffer, sizeof(ackbuffer));
             memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &recvBytes - 2, 4);
             memcpy(&messArray[ ((receivedSeqNum)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (buffer + 2), recvBytes - 2);
@@ -615,7 +614,7 @@ int main(int argc, char * argv[]) {
       // add 4 to acount for the int to be stored at the beginning
       char messQueue[(buffer_size+4) * MAX_UNACK];
       
-      double timeOut = 1;
+      double timeOut = 2;
 
       struct timeval timeSelectCheck; // how long we want to wait while checking for ACK's with select
       timeSelectCheck.tv_usec = 1000; // 1 milliseconds
@@ -797,6 +796,7 @@ int main(int argc, char * argv[]) {
                   fprintf(stderr, "%s\n","sending stuff");
                 }
                 head++;
+                sleep(1);
               }
               // now we can mark that that this message was ACKed
               head++;
