@@ -653,17 +653,7 @@ int main(int argc, char * argv[]) {
             }
 
             gettimeofday(&currTime, NULL);
-
-            // fprintf(stderr, "curr time is %ld is %d.\n", currTime.tv_sec, currTime.tv_usec);
-
             memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
-            // if (nc_args.verbose){
-            //   fprintf(stderr, "%s\n","right before sequence memcpy and after timeQueue copy");
-            //   for (int i = head; i < length+head; i++) {
-            //     fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-            //     fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
-            //   }
-            // }
             memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &sequenceNum, sizeof(sequenceNum));
             memcpy(&messQueue[(head+length)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &nread, 4);
             memcpy(&messQueue[ ((head+length)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (linebuffer + 2), nread);
@@ -682,6 +672,14 @@ int main(int argc, char * argv[]) {
 
             length++;
             sequenceNum++;
+          }
+        }
+
+        if (nc_args.verbose){
+          fprintf(stderr, "%s\n","right before sequence memcpy and after timeQueue copy");
+          for (int i = head; i < length+head; i++) {
+            fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
           }
         }
         
@@ -716,7 +714,7 @@ int main(int argc, char * argv[]) {
               if (nc_args.verbose){
                   fprintf(stderr, "Resending packet number: %d  since an ACK has not been received within the timeOut.\n", oldSequenceNum);
               }
-              memcpy(&linebuffer, &oldSequenceNum, sizeof(sequenceNum));
+              memcpy(linebuffer, &oldSequenceNum, sizeof(sequenceNum));
               int mess_len;
               // copy the length of the message into a variable
               memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
@@ -842,7 +840,7 @@ int main(int argc, char * argv[]) {
             if (nc_args.verbose){
                 fprintf(stderr, "Resending packet number: %d  since an ACK has not been received within the timeOut.\n", oldSequenceNum);
             }
-            memcpy(&linebuffer, &oldSequenceNum, sizeof(sequenceNum));
+            memcpy(linebuffer, &oldSequenceNum, sizeof(sequenceNum));
             int mess_len;
             // copy the length of the message into a variable
             memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
