@@ -4,6 +4,10 @@ using select when we want to read from stdin
 
 when the client quits, make sure the rest of the queue gets emptied/sent and acked
 
-How do you quit out??
+How do you quit out?? cntr-d doesn't shutdown the client...
 
 timing and bits/s
+
+make it all delivered in order
+
+error writing to server for terminal message
