@@ -682,14 +682,20 @@ int main(int argc, char * argv[]) {
             gettimeofday(&currTime, NULL);
             memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
             if (sequenceNum == 0) {
-              fprintf(stderr, "%s\n","sequence num is zero!");
-              for (int i = head; i < length+head; i++) {
+              fprintf(stderr, "%s\n","after storing timeing");
+              for (int i = head; i < length+head+1; i++) {
                 fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
                 fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
               }
               return 0;
             }
             memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &sequenceNum, sizeof(sequenceNum));
+            if (nc_args.verbose) {
+              fprintf(stderr, "%s\n","after storing seq num");
+              for (int i = head; i < length+head+1; i++) {
+                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+              }
+            }
             memcpy(&messQueue[(head+length)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &nread, 4);
             memcpy(&messQueue[ ((head+length)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (linebuffer + 2), nread);
 
@@ -711,10 +717,9 @@ int main(int argc, char * argv[]) {
         }
 
         if (nc_args.verbose){
-          fprintf(stderr, "%s\n","right before sequence memcpy and after timeQueue copy");
+          fprintf(stderr, "%s\n","right after reading everything from std in");
           for (int i = head; i < length+head; i++) {
             fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-            fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
           }
         }
         
@@ -763,6 +768,12 @@ int main(int argc, char * argv[]) {
             if (nc_args.verbose){
                 fprintf(stderr,"checking for ack, nready from server is: %d \n", nready);
             }
+            if (nc_args.verbose) {
+              fprintf(stderr, "%s\n","after storing an ack from server");
+              for (int i = head; i < length+head; i++) {
+                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+              }
+            }
           }
           if (nc_args.verbose){
             fprintf(stderr,"done waiting for acks \n");
@@ -780,8 +791,8 @@ int main(int argc, char * argv[]) {
             ackMatch = true;
           }
           if (headSequenceVal == 0) {
-            if (nc_args.verbose){
-              fprintf(stderr, "%s\n","right before sequence memcpy and after timeQueue copy");
+            if (nc_args.verbose) {
+              fprintf(stderr, "%s\n","after done reading ack's from server");
               for (int i = head; i < length+head; i++) {
                 fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
               }
