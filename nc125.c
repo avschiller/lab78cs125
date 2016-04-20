@@ -687,7 +687,7 @@ int main(int argc, char * argv[]) {
                 fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
                 fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
               }
-              return;
+              return 0;
             }
             memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &sequenceNum, sizeof(sequenceNum));
             memcpy(&messQueue[(head+length)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &nread, 4);
@@ -781,7 +781,7 @@ int main(int argc, char * argv[]) {
             ackMatch = true;
           }
           if (headSequenceVal == 0) {
-            return;
+            return 0;
           }
 
           // if we have no match and this one has expired, then we must resend it
