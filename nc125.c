@@ -395,8 +395,11 @@ int main(int argc, char * argv[]) {
               fprintf(stderr, "stored the sequence num %d \n", receivedSeqNum);
             }
             memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &recvBytes - 2, 4);
+            int messageLengthtest;
+            memcpy(&messageLengthtest, &messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffersize+4))], 4);
             if (nc_args.verbose) {
-              fprintf(stderr, "storing the packet to be pringted later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
+              fprintf(stderr, "storing the packet to be printed later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
+              fprintf(stderr, "repring the messagelengthtest: %d \n", messageLengthtest);
             }
             memcpy(&messArray[ ((receivedSeqNum)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (buffer + 2), recvBytes - 2);
           }
@@ -410,7 +413,7 @@ int main(int argc, char * argv[]) {
             }
             // copy the message length to an int
             int messageLength;
-            memcpy(&messageLength, &messArray[(currSequenceNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], 4);
+            memcpy(&messageLength, &messArray[(currSequenceNum)*(buffer_size+4) % (MAX_UNACK* (buffersize+4))], 4);
             if (nc_args.verbose) {
               fprintf(stderr, "copied the message length %d \n", messageLength);
             }
