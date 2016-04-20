@@ -387,8 +387,14 @@ int main(int argc, char * argv[]) {
             fflush(stdout);
             currSequenceNum++;
           } else if (receivedSeqNum > currSequenceNum) { // this message shouldn't be displayed yet so we store it
+            if (nc_args.verbose) {
+              fprintf(stderr, "storing the packet to be pringted later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
+            }
             memcpy(&sequenceArray[(receivedSeqNum) % MAX_UNACK], &ackbuffer, sizeof(ackbuffer));
-            memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], recvBytes - 2, 4);
+            if (nc_args.verbose) {
+              fprintf(stderr, "stored the sequence num %d \n", receivedSeqNum);
+            }
+            memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &recvBytes - 2, 4);
             if (nc_args.verbose) {
               fprintf(stderr, "storing the packet to be pringted later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
             }
