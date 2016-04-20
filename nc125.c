@@ -850,12 +850,7 @@ int main(int argc, char * argv[]) {
               }
               gettimeofday(&currTime, NULL);
               memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
-              if (nc_args.verbose) {
-                fprintf(stderr, "%s\n","after store time queue");
-                for (int i = head; i < length+head; i++) {
-                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-                }
-              }
+              
               int mess_len;
               // copy the length of the message into a variable
               memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
@@ -865,7 +860,17 @@ int main(int argc, char * argv[]) {
               // copy the old message into the new location in the queue
               memcpy(&messQueue[ (head+length * (buffer_size + 4)) % (MAX_UNACK*(buffer_size+4))], &mess_len, 4);
               memcpy(&messQueue[ (head+length * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+              memcpy(&messQueue[ (head+length * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+              char testval[1100];
 
+              if (nc_args.verbose) {
+                fprintf(stderr, "%s\n","right before resending");
+                for (int i = head; i < length+head; i++) {
+                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                  memcpy(&testval, &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+                  fprintf(stderr, "message is: %s .\n", testval);
+                }
+              }
 
               int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
               if (nwrite < 0){
