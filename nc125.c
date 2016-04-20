@@ -396,6 +396,15 @@ int main(int argc, char * argv[]) {
           
           short receivedSeqNum;
           memcpy(&receivedSeqNum, &ackbuffer, 2);
+          
+          // Check if this is the last datagram to be received
+          if (receivedSeqNum == 0 ) {
+            if (nc_args.verbose) {
+              fprintf(stderr, "the client is done sending the data\n");
+              fprintf(stderr, "closing the connection now\n");
+            }
+            break;
+          }
           // print it if it's next to be printed
           if (nc_args.verbose) {
             fprintf(stderr, "received sequence number %d, next expected was %d \n", receivedSeqNum, currSequenceNum);
@@ -443,15 +452,11 @@ int main(int argc, char * argv[]) {
             currSequenceNum++;
             memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
           }
-          
-          memcpy(&arraySeqNum, &sequenceArray[currSequenceNum-1 % MAX_UNACK], 2);
-          // Check if this is the last datagram to be received
-          if (arraySeqNum == 0 ) {
-            fprintf(stderr, "the client is done sending the data\n");
-            fprintf(stderr, "closing the connection now\n");
-            break;
-          }
         }
+      }
+      if (nc_args.verbose) {
+        fprintf(stderr, "the client is done sending the data\n");
+        fprintf(stderr, "closing the connection now\n");
       }
       close(sockfd);
     }
