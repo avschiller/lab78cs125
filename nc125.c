@@ -868,7 +868,7 @@ int main(int argc, char * argv[]) {
 
             if (nc_args.verbose) {
               fprintf(stderr, "%s\n","right before resending");
-              for (int i = head; i < length+head; i++) {
+              for (int i = head; i < length+head+1; i++) {
                 fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
                 char testval[1100];
                 memcpy(&testval, &messQueue[ (i * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], 1);
