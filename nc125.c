@@ -809,7 +809,7 @@ int main(int argc, char * argv[]) {
           // if we have no match and this one has expired, then we must resend it
           if (!ackMatch && ((totalCurrTime - totalPacketTime) > timeOut ) ) {
             if (nc_args.verbose){
-              fprintf(stderr, "%s\n","select resulted in a timeout, so nothing received from server");
+              fprintf(stderr, "%s\n","no ack received within the timeOut");
             }
             if ( (totalCurrTime - totalPacketTime) > timeOut ) {
               // this packet was not acknowledged in the timeOut given!
@@ -817,9 +817,16 @@ int main(int argc, char * argv[]) {
               //use a different sequence number for the packet being resent
               int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
               if (nc_args.verbose){
-                  fprintf(stderr, "Resending packet number: %d  since an ACK has not been received within the timeOut.\n", oldSequenceNum);
+                  fprintf(stderr, "Resending packet number: %d  stored at index %d, since an ACK has not been received within the timeOut.\n", oldSequenceNum, head%MAX_UNACK);
+                  fprintf(stderr, "head is %d  and length is %d", head, length);
               }
               memcpy(linebuffer, &oldSequenceNum, sizeof(sequenceNum));
+              if (nc_args.verbose) {
+                fprintf(stderr, "%s\n","after put into linebuffer");
+                for (int i = head; i < length+head; i++) {
+                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                }
+              }
               memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &oldSequenceNum, sizeof(oldSequenceNum));
               if (nc_args.verbose) {
                 fprintf(stderr, "%s\n","after store seq num");
@@ -834,7 +841,7 @@ int main(int argc, char * argv[]) {
                 for (int i = head; i < length+head; i++) {
                   fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
                 }
-            }
+              }
               int mess_len;
               // copy the length of the message into a variable
               memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
