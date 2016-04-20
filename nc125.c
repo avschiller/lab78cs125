@@ -815,10 +815,10 @@ int main(int argc, char * argv[]) {
               // this packet was not acknowledged in the timeOut given!
               // Resend the packet and adjust the timeOut value?
               //use a different sequence number for the packet being resent
-              int oldSequenceNum = sequenceQueue[head % MAX_UNACK];
+              short oldSequenceNum = sequenceQueue[head % MAX_UNACK];
               if (nc_args.verbose){
                   fprintf(stderr, "Resending packet number: %d  stored at index %d, since an ACK has not been received within the timeOut.\n", oldSequenceNum, head%MAX_UNACK);
-                  fprintf(stderr, "head is %d  and length is %d", head, length);
+                  fprintf(stderr, "head is %d  and length is %d \n", head, length);
               }
               memcpy(linebuffer, &oldSequenceNum, sizeof(sequenceNum));
               if (nc_args.verbose) {
