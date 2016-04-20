@@ -383,6 +383,9 @@ int main(int argc, char * argv[]) {
             fprintf(stderr, "received sequence number %d, next expected was %d \n", receivedSeqNum, currSequenceNum);
           }
           if (receivedSeqNum == currSequenceNum) {
+            if (nc_args.verbose) {
+              fprintf(stderr, "confirmed next to print\n");
+            }
             fwrite(buffer+2, recvBytes-2, 1, stdout);
             fflush(stdout);
             currSequenceNum++;
@@ -678,6 +681,14 @@ int main(int argc, char * argv[]) {
 
             gettimeofday(&currTime, NULL);
             memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
+            if (sequenceNum == 0) {
+              fprintf(stderr, "%s\n","sequence num is zero!");
+              for (int i = head; i < length+head; i++) {
+                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
+              }
+              break;
+            }
             memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &sequenceNum, sizeof(sequenceNum));
             memcpy(&messQueue[(head+length)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &nread, 4);
             memcpy(&messQueue[ ((head+length)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (linebuffer + 2), nread);
