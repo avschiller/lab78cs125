@@ -388,7 +388,10 @@ int main(int argc, char * argv[]) {
             currSequenceNum++;
           } else if (receivedSeqNum > currSequenceNum) { // this message shouldn't be displayed yet so we store it
             memcpy(&sequenceArray[(receivedSeqNum) % MAX_UNACK], &ackbuffer, sizeof(ackbuffer));
-            memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &recvBytes - 2, 4);
+            memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], recvBytes - 2, 4);
+            if (nc_args.verbose) {
+              fprintf(stderr, "storing the packet to be pringted later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
+            }
             memcpy(&messArray[ ((receivedSeqNum)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (buffer + 2), recvBytes - 2);
           }
           
@@ -414,8 +417,6 @@ int main(int argc, char * argv[]) {
             fflush(stdout);
             currSequenceNum++;
           }
-
-
           
           // Check if this is the last datagram to be received
           if (ackbuffer[0] == 0 && ackbuffer[1] == 0 ) {
