@@ -402,9 +402,6 @@ int main(int argc, char * argv[]) {
             fflush(stdout);
             currSequenceNum++;
           } else if (receivedSeqNum > currSequenceNum) { // this message shouldn't be displayed yet so we store it
-            if (nc_args.verbose) {
-              fprintf(stderr, "storing the packet to be printed later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
-            }
             memcpy(&sequenceArray[(receivedSeqNum) % MAX_UNACK], &ackbuffer, sizeof(ackbuffer));
             if (nc_args.verbose) {
               fprintf(stderr, "stored the sequence num %d \n", receivedSeqNum);
@@ -436,6 +433,7 @@ int main(int argc, char * argv[]) {
             fwrite(buffer, messageLength, 1, stdout);
             fflush(stdout);
             currSequenceNum++;
+            memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
           }
           
           // Check if this is the last datagram to be received
