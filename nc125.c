@@ -693,24 +693,27 @@ int main(int argc, char * argv[]) {
 
             gettimeofday(&currTime, NULL);
             memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
-            if (sequenceNum == 0) {
-              fprintf(stderr, "%s\n","after storing timeing");
-              for (int i = head; i < length+head+1; i++) {
-                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-                fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
-              }
-              return 0;
-            }
+            // if (sequenceNum == 0) {
+            //   fprintf(stderr, "%s\n","after storing timeing");
+            //   for (int i = head; i < length+head+1; i++) {
+            //     fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            //     fprintf(stderr, "logged timequeue number for index queue index %d is %ld , %d.\n", i%MAX_UNACK, timeQueue[i % MAX_UNACK].tv_sec, timeQueue[i % MAX_UNACK].tv_usec );
+            //   }
+            //   return 0;
+            // }
             memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &sequenceNum, sizeof(sequenceNum));
+            
+            memcpy(&messQueue[(head+length)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &nread, 4);
+            memcpy(&messQueue[ ((head+length)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (linebuffer + 2), nread);
             if (nc_args.verbose) {
               fprintf(stderr, "%s\n","after storing seq num");
               for (int i = head; i < length+head+1; i++) {
                 fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                char testval[1100];
+                memcpy(&testval, &messQueue[ (i * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], 1);
+                fprintf(stderr, "message is: %s .\n", testval);
               }
             }
-            memcpy(&messQueue[(head+length)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &nread, 4);
-            memcpy(&messQueue[ ((head+length)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (linebuffer + 2), nread);
-
             int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
             if (nwrite < 0){
               if (nc_args.verbose){
@@ -733,6 +736,9 @@ int main(int argc, char * argv[]) {
           fprintf(stderr, "%s\n","right after reading everything from std in");
           for (int i = head; i < length+head; i++) {
             fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            char testval[1100];
+            memcpy(&testval, &messQueue[ (i * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], 1);
+            fprintf(stderr, "message is: %s .\n", testval);
           }
         }
         
@@ -787,6 +793,9 @@ int main(int argc, char * argv[]) {
             fprintf(stderr, "%s\n","done waiting for acks");
             for (int i = head; i < length+head; i++) {
               fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+              char testval[1100];
+              memcpy(&testval, &messQueue[ (i * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], 1);
+              fprintf(stderr, "message is: %s .\n", testval);
             }
           }
           if (nc_args.verbose){
@@ -809,6 +818,9 @@ int main(int argc, char * argv[]) {
               fprintf(stderr, "%s\n","after done reading ack's from server");
               for (int i = head; i < length+head; i++) {
                 fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                char testval[1100];
+                memcpy(&testval, &messQueue[ (i * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], 1);
+                fprintf(stderr, "message is: %s .\n", testval);
               }
             }
             return 0;
