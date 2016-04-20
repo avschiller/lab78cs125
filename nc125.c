@@ -768,7 +768,6 @@ int main(int argc, char * argv[]) {
             fprintf(stderr,"done waiting for acks \n");
           }
 
-
           bool ackMatch = false;
           short ackValForHead;
           short headSequenceVal;
@@ -781,6 +780,12 @@ int main(int argc, char * argv[]) {
             ackMatch = true;
           }
           if (headSequenceVal == 0) {
+            if (nc_args.verbose){
+              fprintf(stderr, "%s\n","right before sequence memcpy and after timeQueue copy");
+              for (int i = head; i < length+head; i++) {
+                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+              }
+            }
             return 0;
           }
 
