@@ -346,7 +346,7 @@ int main(int argc, char * argv[]) {
       struct sockaddr_storage addr;
       socklen_t fromlen;
 
-      const int MAX_UNACK = 100;
+      const int MAX_UNACK = 1000;
       int buffer_size = MAXLINE;
       short sequenceArray[MAX_UNACK];
       memset(sequenceArray, 0, sizeof(sequenceArray));
@@ -402,7 +402,7 @@ int main(int argc, char * argv[]) {
             fflush(stdout);
             currSequenceNum++;
           } else if (receivedSeqNum > currSequenceNum) { // this message shouldn't be displayed yet so we store it
-            memcpy(&sequenceArray[(receivedSeqNum) % MAX_UNACK], &ackbuffer, sizeof(ackbuffer));
+            memcpy(&sequenceArray[(receivedSeqNum) % MAX_UNACK], &ackbuffer, sizeof(receivedSeqNum));
             if (nc_args.verbose) {
               fprintf(stderr, "stored the sequence num %d \n", receivedSeqNum);
             }
@@ -417,6 +417,9 @@ int main(int argc, char * argv[]) {
           
           short arraySeqNum;
           memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
+          if (nc_args.verbose) {
+            fprintf(stderr, "the value at seqArray index %d is %d \n", currSequenceNum, arraySeqNum);
+          }
           // print from the array as long as the array holds that next message to be printed
           while(arraySeqNum == currSequenceNum) {
             if (nc_args.verbose) {
