@@ -340,7 +340,7 @@ int main(int argc, char * argv[]) {
       struct sockaddr_storage addr;
       socklen_t fromlen;
 
-      const int MAX_UNACK = 50;
+      const int MAX_UNACK = 100;
       int buffer_size = MAXLINE;
       short sequenceArray[MAX_UNACK];
       memset(sequenceArray, 0, sizeof(sequenceArray));
@@ -398,7 +398,9 @@ int main(int argc, char * argv[]) {
               fprintf(stderr, "stored the sequence num %d \n", receivedSeqNum);
             }
             int lengthOfMessage = recvBytes - 2;
-            fprintf(stderr, "length of message is %d \n", lengthOfMessage);
+            if (nc_args.verbose) {
+              fprintf(stderr, "length of message is %d \n", lengthOfMessage);
+            }
 
             memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &lengthOfMessage, 4);
             int messageLengthtest;
@@ -620,7 +622,7 @@ int main(int argc, char * argv[]) {
 
       // Write from stdin
       const int MAXLINE = 1100;
-      const int MAX_UNACK = 4;
+      const int MAX_UNACK = 20;
       const int MAX_ACKSTORAGE = MAX_UNACK * 10;
       char linebuffer[MAXLINE];
       char ackbuffer[20];

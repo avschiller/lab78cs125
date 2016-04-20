@@ -11,3 +11,5 @@ timing and bits/s
 make it all delivered in order
 
 error writing to server for terminal message
+
+sometimes prints a value one under what it should when it see's the right seqnum
