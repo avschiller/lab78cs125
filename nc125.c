@@ -444,11 +444,11 @@ int main(int argc, char * argv[]) {
             memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
           }
           
-          memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
+          memcpy(&arraySeqNum, &sequenceArray[currSequenceNum-1 % MAX_UNACK], 2);
           // Check if this is the last datagram to be received
           if (arraySeqNum == 0 ) {
-            fprintf(stderr, "the client is done sending the data");
-            fprintf(stderr, "closing the connection now");
+            fprintf(stderr, "the client is done sending the data\n");
+            fprintf(stderr, "closing the connection now\n");
             break;
           }
         }
@@ -624,7 +624,6 @@ int main(int argc, char * argv[]) {
     // Communicating with UDP with ACKs!
     else if (nc_args.udpProtected) {
       for(p = servinfo; p != NULL; p = p->ai_next) {
-        fprintf(stderr, "%s\n","1");
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
           if (nc_args.verbose) {
@@ -633,7 +632,9 @@ int main(int argc, char * argv[]) {
             continue;
         }
       }
-      fprintf(stderr, "%s\n","Created Socket");
+      if (nc_args.verbose) {
+        fprintf(stderr, "%s\n","Created Socket");
+      }
 
       freeaddrinfo(servinfo); // all done with this structure
 
