@@ -343,6 +343,8 @@ int main(int argc, char * argv[]) {
       const int MAX_UNACK = 50;
       int buffer_size = MAXLINE;
       short sequenceArray[MAX_UNACK];
+      memset(sequenceArray, 0, sizeof(sequenceArray));
+
       // add 4 to acount for the int to be stored at the beginning
       char messArray[(buffer_size+4) * MAX_UNACK];
       int currSequenceNum = 1;
@@ -363,7 +365,6 @@ int main(int argc, char * argv[]) {
             fprintf(stderr, "received %d bytes\n", recvBytes);
           }
           
-
           // make what we are going to reply to the client to confirm message
           memcpy(&ackbuffer, &buffer, 2);
           //fromlen = sizeof(addr);
@@ -395,6 +396,9 @@ int main(int argc, char * argv[]) {
           memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
           // print from the array as long as the array holds that next message to be printed
           while(arraySeqNum == currSequenceNum) {
+            if (nc_args.verbose) {
+              fprintf(stderr, "the next array value also matches. received sequence number %d, next expected was %d \n", arraySeqNum, currSequenceNum);
+            }
             // copy the message length to an int
             int messageLength;
             memcpy(&messageLength, &messArray[(currSequenceNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], 4);
