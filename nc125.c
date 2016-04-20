@@ -403,7 +403,7 @@ int main(int argc, char * argv[]) {
             currSequenceNum++;
           } else if (receivedSeqNum > currSequenceNum) { // this message shouldn't be displayed yet so we store it
             if (nc_args.verbose) {
-              fprintf(stderr, "storing the packet to be pringted later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
+              fprintf(stderr, "storing the packet to be printed later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
             }
             memcpy(&sequenceArray[(receivedSeqNum) % MAX_UNACK], &ackbuffer, sizeof(ackbuffer));
             if (nc_args.verbose) {
@@ -782,19 +782,13 @@ int main(int argc, char * argv[]) {
             if (nc_args.verbose){
                 fprintf(stderr,"checking for ack, nready from server is: %d \n", nready);
             }
-            if (nc_args.verbose) {
-              fprintf(stderr, "%s\n","after storing an ack from server");
-              for (int i = head; i < length+head; i++) {
-                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-              }
-            }
           }
           if (nc_args.verbose) {
-              fprintf(stderr, "%s\n","done waiting for acks");
-              for (int i = head; i < length+head; i++) {
-                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-              }
+            fprintf(stderr, "%s\n","done waiting for acks");
+            for (int i = head; i < length+head; i++) {
+              fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
             }
+          }
           if (nc_args.verbose){
             fprintf(stderr,"done waiting for acks \n");
           }
@@ -825,63 +819,60 @@ int main(int argc, char * argv[]) {
             if (nc_args.verbose){
               fprintf(stderr, "%s\n","no ack received within the timeOut");
             }
-            if ( (totalCurrTime - totalPacketTime) > timeOut ) {
-              // this packet was not acknowledged in the timeOut given!
-              // Resend the packet and adjust the timeOut value?
-              //use a different sequence number for the packet being resent
-              short oldSequenceNum = sequenceQueue[head % MAX_UNACK];
-              if (nc_args.verbose){
-                  fprintf(stderr, "Resending packet number: %d  stored at index %d, since an ACK has not been received within the timeOut.\n", oldSequenceNum, head%MAX_UNACK);
-                  fprintf(stderr, "head is %d  and length is %d \n", head, length);
-              }
-              memcpy(linebuffer, &oldSequenceNum, sizeof(sequenceNum));
-              if (nc_args.verbose) {
-                fprintf(stderr, "%s\n","after put into linebuffer");
-                for (int i = head; i < length+head; i++) {
-                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-                }
-              }
-              memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &oldSequenceNum, sizeof(oldSequenceNum));
-              if (nc_args.verbose) {
-                fprintf(stderr, "%s\n","after store seq num");
-                for (int i = head; i < length+head; i++) {
-                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-                }
-              }
-              gettimeofday(&currTime, NULL);
-              memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
-              
-              int mess_len;
-              // copy the length of the message into a variable
-              memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
-              // copy the old message into the line buffer
-              memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
-
-              // copy the old message into the new location in the queue
-              memcpy(&messQueue[ (head+length * (buffer_size + 4)) % (MAX_UNACK*(buffer_size+4))], &mess_len, 4);
-              memcpy(&messQueue[ (head+length * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
-              memcpy(&messQueue[ (head+length * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
-              char testval[1100];
-
-              if (nc_args.verbose) {
-                fprintf(stderr, "%s\n","right before resending");
-                for (int i = head; i < length+head; i++) {
-                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
-                  memcpy(&testval, &messQueue[ (i * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
-                  fprintf(stderr, "message is: %s .\n", testval);
-                }
-              }
-
-              int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
-              if (nwrite < 0){
-                if (nc_args.verbose){
-                  fprintf(stderr, "%s\n","Error with writing to the server");
-                }
-                exit(5);
-              }
-              totalBytes += nread+2; //tracking bandwidth
-              head++;
+            // this packet was not acknowledged in the timeOut given!
+            // Resend the packet and adjust the timeOut value?
+            //use a different sequence number for the packet being resent
+            short oldSequenceNum = sequenceQueue[head % MAX_UNACK];
+            if (nc_args.verbose){
+                fprintf(stderr, "Resending packet number: %d  stored at index %d, since an ACK has not been received within the timeOut.\n", oldSequenceNum, head%MAX_UNACK);
+                fprintf(stderr, "head is %d  and length is %d \n", head, length);
             }
+            memcpy(linebuffer, &oldSequenceNum, sizeof(sequenceNum));
+            // if (nc_args.verbose) {
+            //   fprintf(stderr, "%s\n","after put into linebuffer");
+            //   for (int i = head; i < length+head; i++) {
+            //     fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            //   }
+            // }
+            memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &oldSequenceNum, sizeof(oldSequenceNum));
+            // if (nc_args.verbose) {
+            //   fprintf(stderr, "%s\n","after store seq num");
+            //   for (int i = head; i < length+head; i++) {
+            //     fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+            //   }
+            // }
+            gettimeofday(&currTime, NULL);
+            memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
+            
+            int mess_len;
+            // copy the length of the message into a variable
+            memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
+            // copy the old message into the line buffer
+            memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+
+            // copy the old message into the new location in the queue
+            memcpy(&messQueue[ (head+length * (buffer_size + 4)) % (MAX_UNACK*(buffer_size+4))], &mess_len, 4);
+            memcpy(&messQueue[ (head+length * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+
+            if (nc_args.verbose) {
+              fprintf(stderr, "%s\n","right before resending");
+              for (int i = head; i < length+head; i++) {
+                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                char testval[1100];
+                memcpy(&testval, &messQueue[ (i * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], 1);
+                fprintf(stderr, "message is: %s .\n", testval);
+              }
+            }
+
+            int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
+            if (nwrite < 0){
+              if (nc_args.verbose){
+                fprintf(stderr, "%s\n","Error with writing to the server");
+              }
+              exit(5);
+            }
+            totalBytes += nread+2; //tracking bandwidth
+            head++;
           }
           // otherwise there is a match for that sequence number
           else if (ackMatch) {
