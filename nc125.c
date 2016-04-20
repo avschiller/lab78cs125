@@ -410,16 +410,10 @@ int main(int argc, char * argv[]) {
               fprintf(stderr, "stored the sequence num %d \n", receivedSeqNum);
             }
             int lengthOfMessage = recvBytes - 2;
-            if (nc_args.verbose) {
-              fprintf(stderr, "length of message is %d \n", lengthOfMessage);
-            }
-
             memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &lengthOfMessage, 4);
             int messageLengthtest;
-            memcpy(&messageLengthtest, &messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], 4);
             if (nc_args.verbose) {
               fprintf(stderr, "storing the packet to be printed later. it is this long: %d and has seqnum: %d \n", recvBytes-2, receivedSeqNum);
-              fprintf(stderr, "repring the messagelengthtest: %d \n", messageLengthtest);
             }
             memcpy(&messArray[ ((receivedSeqNum)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], (buffer + 2), recvBytes - 2);
           }
@@ -439,9 +433,6 @@ int main(int argc, char * argv[]) {
             }
             // copy the message to be printed to the buffer
             memcpy(&buffer, &messArray[(((currSequenceNum)*(buffer_size+4)) + 4) % (MAX_UNACK* (buffer_size+4))], messageLength); 
-            if (nc_args.verbose) {
-              fprintf(stderr, "copied the message %d \n", messageLength);
-            }
             fwrite(buffer, messageLength, 1, stdout);
             fflush(stdout);
             currSequenceNum++;
@@ -870,6 +861,12 @@ int main(int argc, char * argv[]) {
               memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
               // copy the old message into the line buffer
               memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+
+              // copy the old message into the new location in the queue
+              memcpy(&messQueue[ (head+length * (buffer_size + 4)) % (MAX_UNACK*(buffer_size+4))], &mess_len, 4);
+              memcpy(&messQueue[ (head+length * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
+
+
               int nwrite = sendto(sockfd, linebuffer, nread+2, 0, servinfo->ai_addr, servinfo->ai_addrlen);
               if (nwrite < 0){
                 if (nc_args.verbose){
