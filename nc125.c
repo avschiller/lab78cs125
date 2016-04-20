@@ -394,7 +394,10 @@ int main(int argc, char * argv[]) {
             if (nc_args.verbose) {
               fprintf(stderr, "stored the sequence num %d \n", receivedSeqNum);
             }
-            memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &recvBytes - 2, 4);
+            int lengthOfMessage = recvBytes - 2;
+            fprintf(stderr, "length of message is %d \n", lengthOfMessage);
+
+            memcpy(&messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], &lengthOfMessage, 4);
             int messageLengthtest;
             memcpy(&messageLengthtest, &messArray[(receivedSeqNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], 4);
             if (nc_args.verbose) {
