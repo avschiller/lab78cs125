@@ -775,6 +775,12 @@ int main(int argc, char * argv[]) {
               }
             }
           }
+          if (nc_args.verbose) {
+              fprintf(stderr, "%s\n","done waiting for acks");
+              for (int i = head; i < length+head; i++) {
+                fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+              }
+            }
           if (nc_args.verbose){
             fprintf(stderr,"done waiting for acks \n");
           }
@@ -815,8 +821,20 @@ int main(int argc, char * argv[]) {
               }
               memcpy(linebuffer, &oldSequenceNum, sizeof(sequenceNum));
               memcpy(&sequenceQueue[(head+length) % MAX_UNACK], &oldSequenceNum, sizeof(oldSequenceNum));
+              if (nc_args.verbose) {
+                fprintf(stderr, "%s\n","after store seq num");
+                for (int i = head; i < length+head; i++) {
+                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                }
+              }
               gettimeofday(&currTime, NULL);
               memcpy(&timeQueue[(head+length) % MAX_UNACK], &currTime, sizeof(currTime)); 
+              if (nc_args.verbose) {
+                fprintf(stderr, "%s\n","after store time queue");
+                for (int i = head; i < length+head; i++) {
+                  fprintf(stderr, "logged sequence number for index queue index %d is %d.\n", i%MAX_UNACK, sequenceQueue[i % MAX_UNACK]);
+                }
+            }
               int mess_len;
               // copy the length of the message into a variable
               memcpy(&mess_len, &messQueue[(head*(buffer_size+4)) % (MAX_UNACK*(buffer_size+4))], 4);
@@ -828,9 +846,6 @@ int main(int argc, char * argv[]) {
                   fprintf(stderr, "%s\n","Error with writing to the server");
                 }
                 exit(5);
-              }
-              if (nc_args.verbose){
-                fprintf(stderr, "%s\n","sending stuff");
               }
               head++;
             }
