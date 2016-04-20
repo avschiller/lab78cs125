@@ -225,7 +225,9 @@ int main(int argc, char * argv[]) {
   struct timeval startTime;
 
   if (nc_args.listen){ // THE SERVER (listening)
-    fprintf(stderr, "%s\n","Setting up the server");
+    if (nc_args.verbose) {
+      fprintf(stderr, "%s\n","Setting up the server");
+    }
     // Step 0: Choose the server port, based on the command-line arguments.
     //int serv_port = nc_args.port;
 
@@ -286,8 +288,10 @@ int main(int argc, char * argv[]) {
     }
 
     freeaddrinfo(servinfo); // all done with this structure
-    fprintf(stderr, "%s\n","freed serv");
-
+    if (nc_args.verbose) {
+      fprintf(stderr, "%s\n","freed serv");
+    }
+    
     if (p == NULL)  {
       if (nc_args.verbose) {
         fprintf(stderr, "server: failed to bind\n");
@@ -382,8 +386,10 @@ int main(int argc, char * argv[]) {
           // ACK the Client
           int reply = sendto(sockfd, ackbuffer, 2, 0, (struct sockaddr *) &addr, fromlen);
           if (reply < 0) {
-            perror("error while acking");
-            fprintf(stderr, "Error while acking");
+            if (nc_args.verbose) {
+              perror("error while acking");
+              fprintf(stderr, "Error while acking");
+            }
             exit(5);
           }
           totalBytes += 2; //tracking bandwidth
@@ -438,8 +444,9 @@ int main(int argc, char * argv[]) {
             memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
           }
           
+          memcpy(&arraySeqNum, &sequenceArray[currSequenceNum % MAX_UNACK], 2);
           // Check if this is the last datagram to be received
-          if (ackbuffer[0] == 0 && ackbuffer[1] == 0 ) {
+          if (arraySeqNum == 0 ) {
             fprintf(stderr, "the client is done sending the data");
             fprintf(stderr, "closing the connection now");
             break;
@@ -567,7 +574,6 @@ int main(int argc, char * argv[]) {
       gettimeofday(&startTime, NULL);
 
       for(p = servinfo; p != NULL; p = p->ai_next) {
-        fprintf(stderr, "%s\n","1");
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                 p->ai_protocol)) == -1) {
           if (nc_args.verbose) {
@@ -576,7 +582,9 @@ int main(int argc, char * argv[]) {
             continue;
         }
       }
-      fprintf(stderr, "%s\n","Created Socket");
+      if (nc_args.verbose) {
+        fprintf(stderr, "%s\n","Created Socket");
+      }
 
       freeaddrinfo(servinfo); // all done with this structure
 
