@@ -863,10 +863,10 @@ int main(int argc, char * argv[]) {
             memcpy((linebuffer + 2), &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
 
             // copy the old message into the new location in the queue
-            memcpy(&messQueue[ (head+length * (buffer_size + 4)) % (MAX_UNACK*(buffer_size+4))], &mess_len, 4);
+            memcpy(&messQueue[ ( (head+length) * (buffer_size + 4)) % (MAX_UNACK*(buffer_size+4))], &mess_len, 4);
             char testval[1100];
             memcpy(&testval, &messQueue[ (head * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], mess_len);
-            memcpy(&messQueue[ (head+length * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &testval, mess_len);
+            memcpy(&messQueue[ ( (head+length) * (buffer_size + 4) + 4) % (MAX_UNACK*(buffer_size+4))], &testval, mess_len);
 
             if (nc_args.verbose) {
               fprintf(stderr, "%s\n","right before resending");
