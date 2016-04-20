@@ -402,9 +402,14 @@ int main(int argc, char * argv[]) {
             // copy the message length to an int
             int messageLength;
             memcpy(&messageLength, &messArray[(currSequenceNum)*(buffer_size+4) % (MAX_UNACK* (buffer_size+4))], 4);
+            if (nc_args.verbose) {
+              fprintf(stderr, "copied the message length %d \n", messageLength);
+            }
             // copy the message to be printed to the buffer
-            memcpy(&buffer, &messArray[((currSequenceNum)*(buffer_size+4) + 4) % (MAX_UNACK* (buffer_size+4))], messageLength); 
-
+            memcpy(&buffer, &messArray[(((currSequenceNum)*(buffer_size+4)) + 4) % (MAX_UNACK* (buffer_size+4))], messageLength); 
+            if (nc_args.verbose) {
+              fprintf(stderr, "copied the message %d \n", messageLength);
+            }
             fwrite(buffer, messageLength, 1, stdout);
             fflush(stdout);
             currSequenceNum++;
