@@ -793,7 +793,7 @@ int main(int argc, char * argv[]) {
             }
           }
           // otherwise there is a match for that sequence number
-          else {
+          else if (ackMatch) {
             // check if the received ack matches the un-acked packet at the head
             if (nc_args.verbose){
                 fprintf(stderr, "confirmed packet number: %d  since a ACK had been received of value %d \n", headSequenceVal, ackValForHead);
